@@ -2,6 +2,8 @@
 
 A Turing-test game: chat with a stranger for two minutes, then call it. Were they a human, or an AI?
 
+Wooo!
+
 This repo is the **testnet demo**. It is built in milestones (see [`docs/technical-plan.md`](docs/technical-plan.md)):
 
 | Milestone                 | What it adds                                                                  | Status |
