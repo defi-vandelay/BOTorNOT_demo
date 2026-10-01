@@ -17,3 +17,4 @@ packages/contracts/cache/
 packages/contracts/broadcast/
 packages/contracts/lib/
 .DS_Store
+next-env.d.ts

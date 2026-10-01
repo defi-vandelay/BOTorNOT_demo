@@ -1,6 +1,6 @@
 # BOT or NOT: Technical Plan (demo)
 
-*Follows the decisions in plan step 4 (`plan/04-recommendation.md` in the project files). This is the build reference for milestones M0 to M4. Anything not covered here follows the simplest option that keeps the [fairness rules](#6-commit-reveal) intact.*
+_Follows the decisions in plan step 4 (`plan/04-recommendation.md` in the project files). This is the build reference for milestones M0 to M4. Anything not covered here follows the simplest option that keeps the [fairness rules](#6-commit-reveal) intact._
 
 ---
 
@@ -43,17 +43,17 @@ Tooling: pnpm workspaces, TypeScript (strict), ESLint (flat config) + Prettier, 
 
 ## 2. Game constants (`packages/shared/src/constants.ts`)
 
-| Constant | Value | Notes |
-|---|---|---|
-| `CHAT_DURATION_MS` | 120 000 | whole chat |
-| `TURN_MS` | 20 000 | per message; timeout passes the turn |
-| `MAX_MESSAGE_CHARS` | 100 | enforced client and server side |
-| `CALL_WINDOW_MS` | 10 000 | to choose BOT or NOT |
-| `BOT_TARGET_SHARE` | 0.5 | operator ratio |
-| `QUEUE_WAIT_MS` | 3 000 to 12 000 | random wait, same distribution for humans and bots |
-| `STAKE` | 1 USDC (1e6 units) | one tier |
-| `RAKE_BPS` | 500 | 5% |
-| `EPOCH_MS` | 600 000 | 10-minute payout pools |
+| Constant            | Value              | Notes                                              |
+| ------------------- | ------------------ | -------------------------------------------------- |
+| `CHAT_DURATION_MS`  | 120 000            | whole chat                                         |
+| `TURN_MS`           | 20 000             | per message; timeout passes the turn               |
+| `MAX_MESSAGE_CHARS` | 100                | enforced client and server side                    |
+| `CALL_WINDOW_MS`    | 10 000             | to choose BOT or NOT                               |
+| `BOT_TARGET_SHARE`  | 0.5                | operator ratio                                     |
+| `QUEUE_WAIT_MS`     | 3 000 to 12 000    | random wait, same distribution for humans and bots |
+| `STAKE`             | 1 USDC (1e6 units) | one tier                                           |
+| `RAKE_BPS`          | 500                | 5%                                                 |
+| `EPOCH_MS`          | 600 000            | 10-minute payout pools                             |
 
 ## 3. Round lifecycle
 
@@ -74,39 +74,39 @@ JSON messages, validated with zod on both ends. The server never sends anything 
 
 **Client → server**
 
-| type | fields | when |
-|---|---|---|
-| `hello` | `address` (guest key or wallet), `sessionAuth?` (M3) | on connect |
-| `queue.join` | none | lobby |
-| `queue.leave` | none | lobby |
-| `chat.typing` | none | while typing (throttled) |
-| `chat.send` | `text` (1 to 100 chars) | on your turn |
-| `call.submit` | `call`: `BOT` or `NOT` | CALL phase |
+| type          | fields                                               | when                     |
+| ------------- | ---------------------------------------------------- | ------------------------ |
+| `hello`       | `address` (guest key or wallet), `sessionAuth?` (M3) | on connect               |
+| `queue.join`  | none                                                 | lobby                    |
+| `queue.leave` | none                                                 | lobby                    |
+| `chat.typing` | none                                                 | while typing (throttled) |
+| `chat.send`   | `text` (1 to 100 chars)                              | on your turn             |
+| `call.submit` | `call`: `BOT` or `NOT`                               | CALL phase               |
 
 **Server → client**
 
-| type | fields |
-|---|---|
-| `welcome` | `playerId` |
-| `queue.waiting` | none |
-| `match.found` | `roundId`, `receipt` (`commit`, `issuedAt`, `signature`), `youStart`, `chatEndsAt` |
-| `turn` | `yours`, `endsAt` |
-| `chat.typing` | none (partner is typing) |
-| `chat.message` | `from` (`you` or `partner`), `text`, `at` |
-| `call.open` | `endsAt` |
-| `round.result` | `answer` (`HUMAN` or `BOT`), `partnerId`, `salt`, `yourCall`, `correct`, `persona?` (name, blurb), `transcriptHash`, `txHash?` |
-| `round.void` | `reason` |
-| `error` | `message` |
+| type            | fields                                                                                                                         |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `welcome`       | `playerId`                                                                                                                     |
+| `queue.waiting` | none                                                                                                                           |
+| `match.found`   | `roundId`, `receipt` (`commit`, `issuedAt`, `signature`), `youStart`, `chatEndsAt`                                             |
+| `turn`          | `yours`, `endsAt`                                                                                                              |
+| `chat.typing`   | none (partner is typing)                                                                                                       |
+| `chat.message`  | `from` (`you` or `partner`), `text`, `at`                                                                                      |
+| `call.open`     | `endsAt`                                                                                                                       |
+| `round.result`  | `answer` (`HUMAN` or `BOT`), `partnerId`, `salt`, `yourCall`, `correct`, `persona?` (name, blurb), `transcriptHash`, `txHash?` |
+| `round.void`    | `reason`                                                                                                                       |
+| `error`         | `message`                                                                                                                      |
 
 ## 5. Data model (SQLite via Drizzle; Postgres in the beta)
 
-| Table | Key columns |
-|---|---|
-| `players` | `id`, `address`, `created_at` |
-| `rounds` | `id` (bytes32 hex), `kind` (`HUMAN`/`BOT`), `persona_id?`, `status`, `started_at`, `ended_at`, `transcript_hash` |
+| Table          | Key columns                                                                                                                |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `players`      | `id`, `address`, `created_at`                                                                                              |
+| `rounds`       | `id` (bytes32 hex), `kind` (`HUMAN`/`BOT`), `persona_id?`, `status`, `started_at`, `ended_at`, `transcript_hash`           |
 | `round_judges` | `round_id`, `player_id`, `address`, `partner_id`, `salt`, `commit`, `call?`, `correct?`, `stake`, `epoch_id`, `settle_tx?` |
-| `messages` | `round_id`, `seq`, `sender` (`A`/`B`/`BOT`), `text`, `at`, `chain_hash` |
-| `personas` | `id`, `json`, `active`, `rounds`, `fooled` |
+| `messages`     | `round_id`, `seq`, `sender` (`A`/`B`/`BOT`), `text`, `at`, `chain_hash`                                                    |
+| `personas`     | `id`, `json`, `active`, `rounds`, `fooled`                                                                                 |
 
 Salts live in `round_judges` until reveal. That is acceptable on testnet; production moves them to a KMS and deletes them after settlement.
 
@@ -141,6 +141,7 @@ Commitment(bytes32 roundId, address judge, bytes32 commit, uint256 stake, uint64
 **Prompt** (system prompt, stable so it caches): who you are (persona), the game situation (a 2-minute text chat with a stranger, short casual messages, never more than 100 characters), rules (never say or hint you are an AI, don't be helpful like an assistant, it's fine to be bored, vague or a bit rude, ask questions back), and the deflection rule (if asked for something offensive, illegal or weird, brush it off like a person would; never comply). Volatile context (local time, a couple of headlines) and the transcript go in `messages`.
 
 **Turn pipeline** (`runtime.ts`):
+
 1. Input check: the partner's last message goes through `policy.classify()`; flagged → deflection (no generation).
 2. Generate: `llm.reply()` with persona prompt + transcript. A refusal or empty output → deflection.
 3. Output check: `policy.classify()` on the reply; flagged → deflection.
@@ -155,35 +156,35 @@ Commitment(bytes32 roundId, address judge, bytes32 commit, uint256 stake, uint64
 
 One contract for the demo, **`GameVault`**:
 
-| Function | Who | What |
-|---|---|---|
-| `deposit(amount)` | player | pulls USDC into the player's balance |
-| `withdraw(amount)` | player | returns unlocked balance |
-| `settleRound(Result r, SessionAuth a, bytes authSig)` | operator | checks the player's session authorisation (ERC-1271 for smart wallets), recomputes the commitment from the reveal, moves the stake into the epoch pool, records the call and whether it was right, emits `RoundSettled(roundId, judge, commit, transcriptHash, call, correct)` |
-| `closeEpoch(epochId)` | anyone, after the epoch ends | pays winners pro rata from the pool minus rake; refunds everyone if all were right or all wrong |
-| `setOperator`, `setTreasury`, `pause` | owner | admin |
+| Function                                              | Who                          | What                                                                                                                                                                                                                                                                           |
+| ----------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `deposit(amount)`                                     | player                       | pulls USDC into the player's balance                                                                                                                                                                                                                                           |
+| `withdraw(amount)`                                    | player                       | returns unlocked balance                                                                                                                                                                                                                                                       |
+| `settleRound(Result r, SessionAuth a, bytes authSig)` | operator                     | checks the player's session authorisation (ERC-1271 for smart wallets), recomputes the commitment from the reveal, moves the stake into the epoch pool, records the call and whether it was right, emits `RoundSettled(roundId, judge, commit, transcriptHash, call, correct)` |
+| `closeEpoch(epochId)`                                 | anyone, after the epoch ends | pays winners pro rata from the pool minus rake; refunds everyone if all were right or all wrong                                                                                                                                                                                |
+| `setOperator`, `setTreasury`, `pause`                 | owner                        | admin                                                                                                                                                                                                                                                                          |
 
 `SessionAuth(address player, address operator, uint256 maxStake, uint256 maxTotal, uint64 expiry, uint256 nonce)` is the one signature a player gives at login. M0 ships `GameVault` with deposit and withdraw only, plus `MockUSDC` and tests.
 
 ## 9. Web app (`apps/web`)
 
-| Route | Content |
-|---|---|
-| `/` | Lobby: how to play, "Find a match", connection status, (M3) wallet + balance |
-| `/play` | Waiting → chat (turn timer, 100-char input, typing indicator) → call (BOT / NOT, 10 s) → result (answer, persona card if bot, verify, tx link) |
-| `/stats` | Rounds, human/bot split, fool rate per persona, fallbacks |
+| Route    | Content                                                                                                                                        |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`      | Lobby: how to play, "Find a match", connection status, (M3) wallet + balance                                                                   |
+| `/play`  | Waiting → chat (turn timer, 100-char input, typing indicator) → call (BOT / NOT, 10 s) → result (answer, persona card if bot, verify, tx link) |
+| `/stats` | Rounds, human/bot split, fool rate per persona, fallbacks                                                                                      |
 
 Guest identity until M3: a random key generated in the browser and kept in localStorage; its address is the judge address in commitments.
 
 ## 10. Configuration
 
-| Variable | App | Milestone |
-|---|---|---|
-| `PORT`, `WEB_ORIGIN`, `DATABASE_PATH` | server | M0 |
-| `LLM_PROVIDER` (`anthropic`/`mock`), `ANTHROPIC_API_KEY`, `BOT_MODEL` | server | M1 |
-| `OPERATOR_PRIVATE_KEY` (testnet only; a dev key is generated if unset) | server | M1 |
-| `CHAIN_ID`, `RPC_URL`, `GAME_VAULT_ADDRESS`, `USDC_ADDRESS`, `PAYMASTER_URL` | server, web | M3 |
-| `NEXT_PUBLIC_SERVER_WS_URL`, `NEXT_PUBLIC_CDP_API_KEY` | web | M1 / M3 |
+| Variable                                                                     | App         | Milestone |
+| ---------------------------------------------------------------------------- | ----------- | --------- |
+| `PORT`, `WEB_ORIGIN`, `DATABASE_PATH`                                        | server      | M0        |
+| `LLM_PROVIDER` (`anthropic`/`mock`), `ANTHROPIC_API_KEY`, `BOT_MODEL`        | server      | M1        |
+| `OPERATOR_PRIVATE_KEY` (testnet only; a dev key is generated if unset)       | server      | M1        |
+| `CHAIN_ID`, `RPC_URL`, `GAME_VAULT_ADDRESS`, `USDC_ADDRESS`, `PAYMASTER_URL` | server, web | M3        |
+| `NEXT_PUBLIC_SERVER_WS_URL`, `NEXT_PUBLIC_CDP_API_KEY`                       | web         | M1 / M3   |
 
 ## 11. Testing
 
