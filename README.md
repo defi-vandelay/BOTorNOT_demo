@@ -33,7 +33,13 @@ cp apps/web/.env.example apps/web/.env.local
 pnpm dev                                         # server on :8787, web on :3000
 ```
 
-Without an `ANTHROPIC_API_KEY` the server uses a mock bot with canned replies, so everything runs offline.
+Open http://localhost:3000 and press **Find a match**.
+
+Without an `ANTHROPIC_API_KEY` the server uses a mock bot with canned replies, so everything runs offline. With a key, bots are played by Claude (`BOT_MODEL` in `apps/server/.env`).
+
+**Playing yourself:** open two browser windows and press Find a match in both. Each match is a bot half the time, so to force the two windows to meet, set `BOT_SHARE=0` in `apps/server/.env` and restart. A window with no human free gets a bot anyway, as in the real game.
+
+**Stats:** http://localhost:8787/stats shows rounds played, the human/bot split and how often the bot fooled people (in memory until M2 adds a database).
 
 `.env` files are git-ignored. **Never commit keys**: this repository is public.
 

@@ -29,7 +29,8 @@ export class AnthropicGateway implements LlmGateway {
   private readonly model: string;
 
   constructor(opts: { apiKey: string; model: string }) {
-    this.client = new Anthropic({ apiKey: opts.apiKey, timeout: 15_000, maxRetries: 1 });
+    // A bot turn is 20 s, so a slow call gives up early (the bot deflects) rather than retrying.
+    this.client = new Anthropic({ apiKey: opts.apiKey, timeout: 12_000, maxRetries: 0 });
     this.model = opts.model;
   }
 

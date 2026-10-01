@@ -200,7 +200,7 @@ Guest identity until M3: a random key generated in the browser and kept in local
 
 **M1 Playable off-chain**: matchmaker, round engine, chat relay, basic bot (one persona, no moderation yet), play page, result with verify button, dev mode for two windows.
 
-**M2 Bot quality and safety**: 20 personas, context feed, humanizer, policy layer, deflections, break-glass, stats page, LLM-judge experiment, red-team prompt list.
+**M2 Bot quality and safety**: SQLite persistence for rounds and stats (M1 keeps them in memory), 20 personas, context feed, humanizer, policy layer, deflections, break-glass, stats page, LLM-judge experiment, red-team prompt list.
 
 **M3 On-chain**: GameVault settlement and epochs, deploy script to Base Sepolia, OnchainKit wallet, session authorisation, deposits, settlement worker, tx links.
 

@@ -1,22 +1,53 @@
 @import 'tailwindcss';
 
 :root {
-  --bg: #f7f7f5;
-  --fg: #16161a;
+  --bg: #f6f5f1;
+  --card: #ffffff;
+  --border: #e3e1da;
+  --fg: #17171c;
   --muted: #6b6b76;
-  --accent: #5b5bd6;
+  --accent: #4f46e5;
+  --accent-fg: #ffffff;
+  --bubble-you: #4f46e5;
+  --bubble-you-fg: #ffffff;
+  --bubble-them: #ebe9e3;
+  --bot: #e5484d;
+  --human: #12a594;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #111114;
+    --bg: #101014;
+    --card: #18181e;
+    --border: #2a2a33;
     --fg: #ededf0;
     --muted: #9a9aa6;
-    --accent: #8b8bf5;
+    --accent: #8b85ff;
+    --accent-fg: #101014;
+    --bubble-you: #6e66ff;
+    --bubble-you-fg: #ffffff;
+    --bubble-them: #26262e;
+    --bot: #ff6369;
+    --human: #3dd6c0;
   }
 }
 
 body {
   background: var(--bg);
   color: var(--fg);
+}
+
+@keyframes blink {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+.typing-dot {
+  animation: blink 1.2s infinite;
 }

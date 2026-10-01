@@ -1,5 +1,5 @@
-import { Lobby } from './Lobby';
+import { Game } from './Game';
 
 export default function Home() {
-  return <Lobby />;
+  return <Game />;
 }
