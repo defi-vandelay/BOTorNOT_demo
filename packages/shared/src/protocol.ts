@@ -1,9 +1,12 @@
 import { z } from 'zod';
 import { MAX_MESSAGE_CHARS } from './constants';
 
-const hex = z.string().regex(/^0x[0-9a-fA-F]*$/);
-const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
-const bytes32 = z.string().regex(/^0x[0-9a-fA-F]{64}$/);
+type Hex = `0x${string}`;
+const hexOf = (pattern: RegExp) =>
+  z.custom<Hex>((v) => typeof v === 'string' && pattern.test(v), { message: 'invalid hex' });
+const hex = hexOf(/^0x[0-9a-fA-F]*$/);
+const address = hexOf(/^0x[0-9a-fA-F]{40}$/);
+const bytes32 = hexOf(/^0x[0-9a-fA-F]{64}$/);
 
 // ---------- client -> server ----------
 
@@ -30,7 +33,14 @@ export const commitmentReceipt = z.object({
 export type CommitmentReceipt = z.infer<typeof commitmentReceipt>;
 
 export const serverMessage = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('welcome'), playerId: z.string() }),
+  z.object({
+    type: z.literal('welcome'),
+    playerId: z.string(),
+    /** Operator address that signs commitment receipts, and the EIP-712 domain it signs under. */
+    operator: address,
+    chainId: z.number().int(),
+    verifyingContract: address,
+  }),
   z.object({ type: z.literal('queue.waiting') }),
   z.object({
     type: z.literal('match.found'),

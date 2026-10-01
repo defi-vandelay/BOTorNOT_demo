@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import type { AddressInfo } from 'node:net';
 import { loadConfig } from '../src/config';
+import { MockGateway } from '../src/llm/mock';
 import { startServer, type GameServer } from '../src/server';
 
 let server: GameServer | undefined;
@@ -11,7 +12,7 @@ afterEach(async () => {
 });
 
 function start() {
-  server = startServer({ ...loadConfig({}), PORT: 0 }, () => {});
+  server = startServer({ ...loadConfig({}), PORT: 0 }, { llm: new MockGateway(), log: () => {} });
   return new Promise<number>((resolve) =>
     server!.http.once('listening', () => resolve((server!.http.address() as AddressInfo).port)),
   );
@@ -24,15 +25,17 @@ describe('game server', () => {
     expect(await res.json()).toEqual({ ok: true, llm: 'mock' });
   });
 
-  it('welcomes a player after hello', async () => {
+  it('welcomes a player after hello and queues them', async () => {
     const port = await start();
     const ws = new WebSocket(`ws://localhost:${port}/ws`);
+    const messages: unknown[] = [];
+    ws.on('message', (data) => messages.push(JSON.parse(data.toString())));
     await new Promise((resolve) => ws.once('open', resolve));
     ws.send(JSON.stringify({ type: 'hello', address: `0x${'ab'.repeat(20)}` }));
-    const reply = await new Promise<string>((resolve) =>
-      ws.once('message', (data) => resolve(data.toString())),
-    );
-    expect(JSON.parse(reply)).toEqual({ type: 'welcome', playerId: 'p1' });
+    ws.send(JSON.stringify({ type: 'queue.join' }));
+    await expect.poll(() => messages.length).toBe(2);
+    expect(messages[0]).toMatchObject({ type: 'welcome', playerId: 'p1', chainId: 84532 });
+    expect(messages[1]).toEqual({ type: 'queue.waiting' });
     ws.close();
   });
 });

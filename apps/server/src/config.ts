@@ -6,6 +6,20 @@ const schema = z.object({
   LLM_PROVIDER: z.enum(['anthropic', 'mock']).optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   BOT_MODEL: z.string().default('claude-opus-5-5'),
+  /** Dev mode lets two browser windows on one machine match each other. */
+  DEV_MODE: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => (v === undefined ? process.env.NODE_ENV !== 'production' : v === 'true')),
+  /** Share of matches given to a bot. Set to 0 to always try for a human (testing with two windows). */
+  BOT_SHARE: z.coerce.number().min(0).max(1).default(0.5),
+  /** EIP-712 domain for commitment receipts. Base Sepolia; the vault address arrives in M3. */
+  CHAIN_ID: z.coerce.number().int().default(84532),
+  GAME_VAULT_ADDRESS: z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{40}$/)
+    .default('0x0000000000000000000000000000000000000000')
+    .transform((v) => v as `0x${string}`),
   OPERATOR_PRIVATE_KEY: z
     .string()
     .regex(/^0x[0-9a-fA-F]{64}$/, 'must be a 0x-prefixed 32-byte hex key')
