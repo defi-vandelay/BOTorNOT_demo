@@ -9,9 +9,11 @@ import { CallScreen } from './screens/CallScreen';
 import { Result } from './screens/Result';
 import { Void } from './screens/Void';
 import { SettlementCard } from './screens/SettlementCard';
+import { WalletPanel } from './screens/WalletPanel';
 
 export function Game() {
   const { state, actions, address } = useGame();
+  const mode = state.welcome?.mode;
 
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col px-4 py-6 sm:py-10">
@@ -23,10 +25,16 @@ export function Game() {
           <Link href="/stats" className="underline">
             Stats
           </Link>
-          {state.points !== undefined && (
+          {mode === 'free' ? (
             <span className="rounded-full border border-[var(--border)] px-3 py-1 font-semibold text-[var(--fg)]">
-              {state.points.toLocaleString()} pts
+              Free play
             </span>
+          ) : (
+            state.points !== undefined && (
+              <span className="rounded-full border border-[var(--border)] px-3 py-1 font-semibold text-[var(--fg)]">
+                {state.points.toLocaleString()} {mode === 'tokens' ? 'tBON' : 'pts'}
+              </span>
+            )
           )}
           <span className="flex items-center gap-2" aria-live="polite">
             <span
@@ -38,11 +46,24 @@ export function Game() {
       </header>
 
       {state.settlement && (state.screen === 'lobby' || state.screen === 'result') && (
-        <SettlementCard settlement={state.settlement} onDismiss={actions.dismissSettlement} />
+        <SettlementCard
+          settlement={state.settlement}
+          unit={mode === 'tokens' ? 'tBON' : 'pts'}
+          explorer={state.welcome?.onchain?.explorer}
+          onDismiss={actions.dismissSettlement}
+        />
       )}
 
       {state.screen === 'lobby' && (
-        <Lobby ready={!!state.welcome} error={state.error} onFind={actions.findMatch} />
+        <Lobby ready={!!state.welcome} mode={mode} error={state.error} onFind={actions.findMatch}>
+          <WalletPanel
+            state={state}
+            address={address}
+            onSignIn={actions.signIn}
+            onSignOut={actions.signOut}
+            onChanged={actions.walletChanged}
+          />
+        </Lobby>
       )}
       {state.screen === 'waiting' && <Waiting onCancel={actions.cancel} />}
       {state.screen === 'chat' && (

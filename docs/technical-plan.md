@@ -208,4 +208,6 @@ Guest identity until M3: a random key generated in the browser and kept in local
 
 **M3 On-chain**: GameVault settlement and epochs, deploy script to Base Sepolia, OnchainKit wallet, session authorisation, deposits, settlement worker, tx links.
 
+_As built (M3):_ the stake is a test ERC20 (`GameToken`, tBON, daily faucet) rather than USDC, per plan doc 06. Payout pools follow doc 06 v2 on-chain (one pool per epoch, deception share, daily pool), not the pro-rata rule in §8. Session authorisation is an on-chain `startSession(expiry)` the player sends in the same gas-free batch as their deposit, instead of a signed `SessionAuth`; that avoids ERC-1271/6492 checks in the contract. The wallet is the Base Account SDK with viem directly (no OnchainKit or wagmi), and sign-in is a signed message the server verifies (6492-aware). Guests play free when the chain is on. Contracts compile with solc-js (`pnpm compile:contracts`), and `pnpm deploy:testnet` deploys with viem, so Foundry is only needed for the tests.
+
 **M4 Deploy**: Vercel (web), Fly.io or Railway (server + volume), monitoring, invite testers.

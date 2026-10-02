@@ -4,3 +4,4 @@ pnpm-lock.yaml
 packages/contracts/lib
 packages/contracts/out
 packages/contracts/cache
+packages/shared/src/abi.ts

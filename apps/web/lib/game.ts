@@ -27,8 +27,12 @@ export interface GameState {
   result?: RoundResult;
   voidReason?: string;
   error?: string;
-  /** Points balance; survives between rounds. */
+  /** Points or whole test tokens the player can stake; survives between rounds. */
   points?: number;
+  /** Tokens mode: when the staking session ends (unix ms; 0 = none). */
+  sessionEndsAt?: number;
+  /** Tokens mode: the transaction that settled this round's call. */
+  settleTx?: `0x${string}`;
   /** The latest payout pool this player had calls in, until dismissed. */
   settlement?: Settlement;
 }
@@ -40,7 +44,8 @@ export type Action =
   | { type: 'left-queue' }
   | { type: 'called'; call: Call }
   | { type: 'back-to-lobby' }
-  | { type: 'dismiss-settlement' };
+  | { type: 'dismiss-settlement' }
+  | { type: 'identity' };
 
 export const initialState: GameState = { connected: false, screen: 'lobby', lines: [] };
 
@@ -51,6 +56,9 @@ export function reduce(state: GameState, action: Action): GameState {
       return action.connected
         ? { ...state, connected: true }
         : { ...state, connected: false, welcome: undefined };
+    case 'identity':
+      // A different player now: nothing from the last one carries over.
+      return { ...initialState, connected: state.connected };
     case 'queued':
       return { ...state, screen: 'waiting', error: undefined };
     case 'left-queue':
@@ -98,7 +106,9 @@ function onServer(state: GameState, msg: ServerMessage, now: number): GameState 
     case 'round.void':
       return { ...state, screen: 'void', voidReason: msg.reason };
     case 'balance':
-      return { ...state, points: msg.points };
+      return { ...state, points: msg.points, sessionEndsAt: msg.sessionEndsAt };
+    case 'round.settled':
+      return msg.roundId === state.roundId ? { ...state, settleTx: msg.txHash } : state;
     case 'epoch.settled':
       return { ...state, settlement: msg };
     case 'error':
@@ -110,8 +120,8 @@ function onServer(state: GameState, msg: ServerMessage, now: number): GameState 
 
 /** What carries over from one round to the next. */
 function kept(state: GameState): Partial<GameState> {
-  const { connected, welcome, points, settlement } = state;
-  return { connected, welcome, points, settlement };
+  const { connected, welcome, points, sessionEndsAt, settlement } = state;
+  return { connected, welcome, points, sessionEndsAt, settlement };
 }
 
 /** The partner's "typing…" shows for this long after their last keystroke ping. */

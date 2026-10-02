@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { parseServerMessage, type Call, type ClientMessage } from '@botornot/shared';
+import type { Address } from 'viem';
 import { guestAccount } from './guest';
 import { initialState, reduce } from './game';
+import { savedSignIn, signIn, signOut, type WalletSignIn } from './wallet';
 
 const WS_URL = process.env.NEXT_PUBLIC_SERVER_WS_URL ?? 'ws://localhost:8787/ws';
 const TYPING_THROTTLE_MS = 1_500;
@@ -13,12 +15,19 @@ export function useGame() {
   const [state, dispatch] = useReducer(reduce, initialState);
   const wsRef = useRef<WebSocket | null>(null);
   const lastTypingRef = useRef(0);
-  // Created after mount: the key lives in sessionStorage, which doesn't exist during server render.
-  const [account, setAccount] = useState<ReturnType<typeof guestAccount> | null>(null);
-  useEffect(() => setAccount(guestAccount()), []);
+  // Created after mount: keys live in browser storage, which doesn't exist during server render.
+  // A wallet sign-in (on-chain mode) takes over from the per-tab guest key.
+  const [guest, setGuest] = useState<ReturnType<typeof guestAccount> | null>(null);
+  const [wallet, setWallet] = useState<WalletSignIn | null>(null);
+  useEffect(() => {
+    setGuest(guestAccount());
+    setWallet(savedSignIn());
+  }, []);
+  const address: Address | null = wallet?.address ?? guest?.address ?? null;
 
   useEffect(() => {
-    if (!account) return;
+    if (!address) return;
+    dispatch({ type: 'identity' });
     let closed = false;
     let retry: ReturnType<typeof setTimeout>;
 
@@ -27,7 +36,10 @@ export function useGame() {
       wsRef.current = ws;
       ws.onopen = () => {
         dispatch({ type: 'connected', connected: true });
-        ws.send(JSON.stringify({ type: 'hello', address: account.address }));
+        const auth = wallet
+          ? { issuedAt: wallet.issuedAt, signature: wallet.signature }
+          : undefined;
+        ws.send(JSON.stringify({ type: 'hello', address, auth }));
       };
       ws.onmessage = (event) => {
         const msg = parseServerMessage(String(event.data));
@@ -44,7 +56,7 @@ export function useGame() {
       clearTimeout(retry);
       wsRef.current?.close();
     };
-  }, [account]);
+  }, [address, wallet]);
 
   const send = useCallback((msg: ClientMessage) => {
     const ws = wsRef.current;
@@ -81,9 +93,20 @@ export function useGame() {
       dismissSettlement() {
         dispatch({ type: 'dismiss-settlement' });
       },
+      async signIn() {
+        setWallet(await signIn());
+      },
+      signOut() {
+        signOut();
+        setWallet(null);
+      },
+      /** After a deposit, withdrawal or session change: ask the server to re-read the chain. */
+      walletChanged() {
+        send({ type: 'wallet.refresh' });
+      },
     }),
     [send],
   );
 
-  return { state, actions, address: account?.address ?? null };
+  return { state, actions, address };
 }

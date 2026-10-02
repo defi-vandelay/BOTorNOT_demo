@@ -15,13 +15,12 @@ export const BOT_TARGET_SHARE = 0.5;
 export const QUEUE_WAIT_MIN_MS = 3_000;
 export const QUEUE_WAIT_MAX_MS = 12_000;
 
-/** Demo stake tier: 1 USDC (6 decimals). */
-export const STAKE_UNITS = 1_000_000n;
 /**
- * Payout pool rules (plan doc 06 v2). Until M3 stakes are off-chain points; the on-chain
- * stake in commitments stays STAKE_UNITS.
+ * Payout pool rules (plan doc 06 v2). Stakes are STAKE_POINTS whole units: off-chain points for
+ * guests, or test tokens (18 decimals, STAKE_UNITS on-chain) for players with a wallet.
  */
 export const STAKE_POINTS = 100;
+export const STAKE_UNITS = BigInt(STAKE_POINTS) * 10n ** 18n;
 /** Points each new player starts with. */
 export const STARTING_POINTS = 1_000;
 /** Share of every forfeited stake kept as the fee, in basis points. */

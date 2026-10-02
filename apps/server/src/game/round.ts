@@ -38,7 +38,15 @@ export interface RoundOutcome {
   roundId: Hex;
   phase: 'done' | 'void';
   kind: PartnerType;
-  judges: { seat: 0 | 1; call: Call | null; correct: boolean | null }[];
+  judges: {
+    seat: 0 | 1;
+    call: Call | null;
+    correct: boolean | null;
+    /** The reveal, for on-chain settlement. */
+    answer: PartnerType;
+    partnerId: Hex;
+    salt: Hex;
+  }[];
   transcript: TranscriptEntry[];
   transcriptHash: Hex;
 }
@@ -212,7 +220,16 @@ export class Round {
         if (!j) return [];
         const call = this.calls[i] ?? null;
         const correct = call ? (call === 'BOT') === (j.answer === 'BOT') : null;
-        return [{ seat: i as 0 | 1, call, correct }];
+        return [
+          {
+            seat: i as 0 | 1,
+            call,
+            correct,
+            answer: j.answer,
+            partnerId: j.partnerId,
+            salt: j.commitment.salt,
+          },
+        ];
       }),
       transcript: this.transcript,
       transcriptHash: this.hash,

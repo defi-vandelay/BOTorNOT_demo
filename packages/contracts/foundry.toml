@@ -8,6 +8,8 @@ remappings = [
   "forge-std/=lib/forge-std/src/",
   "@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/",
 ]
+solc_version = "0.8.28"
+evm_version = "shanghai"
 optimizer = true
 optimizer_runs = 200
 

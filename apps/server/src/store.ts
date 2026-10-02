@@ -28,6 +28,11 @@ CREATE TABLE IF NOT EXISTS epochs (
   closed_at INTEGER NOT NULL,
   settlement TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS chain_claims (
+  epoch INTEGER NOT NULL,
+  player TEXT NOT NULL,
+  PRIMARY KEY (epoch, player)
+);
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value INTEGER NOT NULL
@@ -126,6 +131,29 @@ export class Store {
         'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
       )
       .run(key, value);
+  }
+
+  // ---------- on-chain payout pools ----------
+
+  /** A player had a staked call settled in this on-chain epoch: pay them out when it closes. */
+  addChainClaim(epoch: number, player: string): void {
+    this.db
+      .prepare('INSERT OR IGNORE INTO chain_claims (epoch, player) VALUES (?, ?)')
+      .run(epoch, player);
+  }
+
+  chainClaims(): Map<number, string[]> {
+    const rows = this.db.prepare('SELECT epoch, player FROM chain_claims ORDER BY epoch').all() as {
+      epoch: number;
+      player: string;
+    }[];
+    const byEpoch = new Map<number, string[]>();
+    for (const r of rows) byEpoch.set(r.epoch, [...(byEpoch.get(r.epoch) ?? []), r.player]);
+    return byEpoch;
+  }
+
+  removeChainClaims(epoch: number): void {
+    this.db.prepare('DELETE FROM chain_claims WHERE epoch = ?').run(epoch);
   }
 
   // ---------- rounds ----------

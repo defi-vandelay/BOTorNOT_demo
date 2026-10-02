@@ -33,4 +33,12 @@ describe('loadConfig', () => {
   it('refuses to start with dev mode on in production', () => {
     expect(() => loadConfig({ NODE_ENV: 'production', DEV_MODE: 'true' })).toThrow(/DEV_MODE/);
   });
+
+  it('plays on-chain only when a vault is set, and then needs the operator key', () => {
+    expect(loadConfig({}).ONCHAIN).toBe(false);
+    const vault = `0x${'12'.repeat(20)}`;
+    expect(() => loadConfig({ GAME_VAULT_ADDRESS: vault })).toThrow(/OPERATOR_PRIVATE_KEY/);
+    const key = `0x${'34'.repeat(32)}`;
+    expect(loadConfig({ GAME_VAULT_ADDRESS: vault, OPERATOR_PRIVATE_KEY: key }).ONCHAIN).toBe(true);
+  });
 });
