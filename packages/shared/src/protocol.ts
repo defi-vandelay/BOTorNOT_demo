@@ -58,7 +58,7 @@ export const serverMessage = z.discriminatedUnion('type', [
         vault: address,
         token: address,
         explorer: z.string(),
-        /** Where the wallet asks for gas sponsorship (the server's paymaster proxy), if any. */
+        /** Where the wallet asks for gas sponsorship (the Coinbase paymaster), if any. */
         paymasterUrl: z.string().optional(),
       })
       .optional(),

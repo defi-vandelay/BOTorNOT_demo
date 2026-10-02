@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import type { AddressInfo } from 'node:net';
-import { createServer } from 'node:http';
 import { STARTING_POINTS } from '@botornot/shared';
 import { loadConfig } from '../src/config';
 import { MockGateway } from '../src/llm/mock';
@@ -61,41 +60,5 @@ describe('origin check', () => {
       ws.once('error', () => resolve('rejected'));
     });
     expect(outcome).toBe('rejected');
-  });
-});
-
-describe('paymaster proxy', () => {
-  it('forwards only paymaster methods to the upstream URL', async () => {
-    const seen: string[] = [];
-    const upstream = createServer((req, res) => {
-      let body = '';
-      req.on('data', (c) => (body += String(c)));
-      req.on('end', () => {
-        seen.push(body);
-        res.writeHead(200, { 'content-type': 'application/json' }).end('{"result":"ok"}');
-      });
-    });
-    await new Promise<void>((r) => upstream.listen(0, r));
-    const upstreamPort = (upstream.address() as AddressInfo).port;
-    const port = await start({ PAYMASTER_URL: `http://127.0.0.1:${upstreamPort}/pm` });
-    const post = (method: string) =>
-      fetch(`http://localhost:${port}/paymaster`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: [] }),
-      });
-
-    const allowed = await post('pm_getPaymasterStubData');
-    expect(allowed.status).toBe(200);
-    expect(await allowed.json()).toEqual({ result: 'ok' });
-    expect((await post('eth_sendTransaction')).status).toBe(403);
-    expect(seen).toHaveLength(1);
-    upstream.close();
-  });
-
-  it('is off without a paymaster URL', async () => {
-    const port = await start();
-    const res = await fetch(`http://localhost:${port}/paymaster`, { method: 'POST', body: '{}' });
-    expect(res.status).toBe(404);
   });
 });
