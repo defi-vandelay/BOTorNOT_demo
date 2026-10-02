@@ -27,20 +27,28 @@ function isEffortModel(model: string): boolean {
 export class AnthropicGateway implements LlmGateway {
   private readonly client: Anthropic;
   private readonly model: string;
+  private readonly classifyModel: string;
 
-  constructor(opts: { apiKey: string; model: string }) {
+  /** classifyModel defaults to model; a small fast model is usually the better choice. */
+  constructor(opts: { apiKey: string; model: string; classifyModel?: string }) {
     // A bot turn is 20 s, so a slow call gives up early (the bot deflects) rather than retrying.
     this.client = new Anthropic({ apiKey: opts.apiKey, timeout: 12_000, maxRetries: 0 });
     this.model = opts.model;
+    this.classifyModel = opts.classifyModel ?? opts.model;
   }
 
   async reply(req: ReplyRequest): Promise<string | null> {
-    const text = await this.complete(req.system, req.messages, req.maxTokens ?? 1024);
+    const text = await this.complete(this.model, req.system, req.messages, req.maxTokens ?? 1024);
     return text?.trim() || null;
   }
 
   async classify(message: string): Promise<Classification> {
-    const text = await this.complete(CLASSIFY_SYSTEM, [{ role: 'user', content: message }], 256);
+    const text = await this.complete(
+      this.classifyModel,
+      CLASSIFY_SYSTEM,
+      [{ role: 'user', content: message }],
+      256,
+    );
     const word = text?.trim().toLowerCase() ?? '';
     const category = CATEGORIES.find((c) => c === word);
     // Anything unparseable, or a refusal to classify, is treated as flagged: safer to deflect.
@@ -49,13 +57,14 @@ export class AnthropicGateway implements LlmGateway {
   }
 
   private async complete(
+    model: string,
     system: string,
     messages: ReplyRequest['messages'],
     maxTokens: number,
   ): Promise<string | null> {
-    const effortModel = isEffortModel(this.model);
+    const effortModel = isEffortModel(model);
     const response = await this.client.beta.messages.create({
-      model: this.model,
+      model,
       max_tokens: maxTokens,
       system,
       messages,

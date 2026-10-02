@@ -132,4 +132,21 @@ describe('BotSeat in a round', () => {
       persona: { name: persona.name },
     });
   });
+
+  it('voids the round with a support message when the partner may be at risk', async () => {
+    const llm = new MockGateway();
+    llm.classify = async (text: string) =>
+      /hurt myself/.test(text)
+        ? { flagged: true, category: 'self_harm' as const }
+        : { flagged: false, category: 'none' as const };
+    const { round, human } = await botRound(llm);
+    round.start();
+    round.send(0, 'i want to hurt myself');
+    await vi.advanceTimersByTimeAsync(TURN_MS);
+    expect(round.phase).toBe('void');
+    expect(human.last('round.void')?.reason).toMatch(/Lifeline/);
+    expect(human.messages.filter((m) => m.type === 'chat.message' && m.from === 'partner')).toEqual(
+      [],
+    );
+  });
 });

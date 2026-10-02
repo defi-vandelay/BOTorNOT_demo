@@ -40,6 +40,8 @@ export interface MatchmakerDeps {
   ledger?: Ledger;
   /** Share of matches that should be bots (operator ratio). */
   botShare: number;
+  /** Today's headlines for the bots' context feed. */
+  headlines?: () => string[];
   /** Allow two players from the same IP to match (two windows on one machine). */
   allowSameIp: boolean;
   log?: (msg: string) => void;
@@ -180,7 +182,7 @@ export class Matchmaker {
       partnerId,
     });
     if (!player.connected || !this.takeStakes(player)) return;
-    const bot = new BotSeat(persona, this.deps.llm);
+    const bot = new BotSeat(persona, this.deps.llm, this.log, this.deps.headlines);
     // The human's seat number is random too, so seat order can't hint at anything.
     const humanSeat: 0 | 1 = this.rng() < 0.5 ? 0 : 1;
     const botSeat: 0 | 1 = humanSeat === 0 ? 1 : 0;

@@ -55,6 +55,12 @@ export interface SimOptions {
   style: SimStyle;
   llm: LlmGateway;
   log: (msg: string) => void;
+  /** Stop after this many finished rounds (default: play until stopped). */
+  maxRounds?: number;
+  /** Called with every round result, e.g. to tally accuracy. */
+  onResult?: (result: Extract<ServerMessage, { type: 'round.result' }>) => void;
+  /** Called once the player has played maxRounds. */
+  onDone?: () => void;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -69,6 +75,7 @@ export class SimPlayer {
   private lines: Line[] = [];
   private turnToken = 0;
   private stopped = false;
+  private rounds = 0;
   points?: number;
 
   constructor(private readonly opts: SimOptions) {
@@ -128,12 +135,13 @@ export class SimPlayer {
         this.opts.log(
           `${this.label}: partner was ${msg.answer}, called ${msg.yourCall} (${verdict})`,
         );
-        void this.requeue();
+        this.opts.onResult?.(msg);
+        this.finishRound();
         break;
       }
       case 'round.void':
         this.turnToken++;
-        void this.requeue();
+        this.finishRound();
         break;
       case 'balance':
         this.points = msg.points;
@@ -148,6 +156,16 @@ export class SimPlayer {
         if (msg.message === 'not enough points') void this.requeue(30_000);
         break;
     }
+  }
+
+  private finishRound(): void {
+    this.rounds++;
+    if (this.opts.maxRounds !== undefined && this.rounds >= this.opts.maxRounds) {
+      this.stop();
+      this.opts.onDone?.();
+      return;
+    }
+    void this.requeue();
   }
 
   /** Back in the queue after a short, human-looking pause. */

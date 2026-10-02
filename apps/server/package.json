@@ -8,7 +8,9 @@
     "start": "tsx --env-file-if-exists=.env src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "sim": "tsx --env-file-if-exists=.env src/sim/index.ts"
+    "sim": "tsx --env-file-if-exists=.env src/sim/index.ts",
+    "red-team": "tsx --env-file-if-exists=.env src/scripts/red-team.ts",
+    "judge-experiment": "tsx --env-file-if-exists=.env src/scripts/judge-experiment.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

@@ -8,6 +8,7 @@ import { Ledger } from './game/ledger';
 import { Matchmaker, type Player } from './game/matchmaker';
 import { Stats } from './game/stats';
 import { operatorAccount } from './operator';
+import { Headlines } from './bots/context';
 
 export interface GameServer {
   http: Server;
@@ -62,9 +63,14 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
     },
   });
   ledger.start();
+  const headlines = new Headlines(
+    config.HEADLINES_RSS_URL === 'off' ? null : config.HEADLINES_RSS_URL,
+    log,
+  );
   const matchmaker = new Matchmaker({
     commit,
     llm: deps.llm,
+    headlines: () => headlines.current(),
     stats,
     ledger,
     botShare: config.BOT_SHARE,

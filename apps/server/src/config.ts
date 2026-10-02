@@ -7,6 +7,10 @@ const schema = z.object({
   LLM_PROVIDER: z.enum(['anthropic', 'mock']).optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   BOT_MODEL: z.string().default('claude-opus-5-5'),
+  /** Model that screens chat messages going into and out of the bots. Small and fast. */
+  MODERATION_MODEL: z.string().default('claude-haiku-4-5'),
+  /** RSS feed the bots read headlines from, so "seen the news today?" has an answer. "off": none. */
+  HEADLINES_RSS_URL: z.string().default('https://feeds.bbci.co.uk/news/world/rss.xml'),
   /** Dev mode lets two browser windows on one machine match each other. */
   DEV_MODE: z.enum(['true', 'false']).optional(),
   /** Share of matches given to a bot. Set to 0 to always try for a human (testing with two windows). */
