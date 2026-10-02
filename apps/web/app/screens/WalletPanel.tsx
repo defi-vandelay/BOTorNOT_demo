@@ -179,6 +179,11 @@ export function WalletPanel({
         </p>
       )}
       {error && <p className="mt-2 text-[var(--bot)]">{error}</p>}
+      {!onchain.paymasterUrl && (
+        <p className="mt-2 text-xs text-[var(--bot)]">
+          Gas sponsorship is off: set PAYMASTER_URL in apps/server/.env and restart the server.
+        </p>
+      )}
       <p className="mt-3 text-xs text-[var(--muted)]">
         Base Sepolia testnet. tBON is a test token with no value.
       </p>

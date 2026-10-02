@@ -19,7 +19,6 @@ import { Store } from './store';
 import { Chain } from './chain/chain';
 import type { Bank } from './game/bank';
 import { OnchainBank } from './game/onchain-bank';
-import { proxyPaymaster } from './chain/paymaster';
 
 export interface GameServer {
   http: Server;
@@ -34,12 +33,6 @@ export interface GameServer {
 export interface ServerDeps {
   llm: LlmGateway;
   log?: (msg: string) => void;
-}
-
-/** This server's own base URL as the browser reached it, for links handed to the web app. */
-function publicUrl(req: IncomingMessage): string {
-  const proto = req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-  return `${proto}://${req.headers.host ?? 'localhost'}`;
 }
 
 function clientIp(req: IncomingMessage): string {
@@ -158,9 +151,6 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
     if (req.url === '/health') return json({ ok: true, llm: config.LLM_PROVIDER });
     if (req.url === '/stats') return json(stats);
     if (req.url === '/pool') return json(onchain ?? ledger);
-    if (req.url === '/paymaster' && config.PAYMASTER_URL) {
-      return void proxyPaymaster(req, res, config.PAYMASTER_URL, config.WEB_ORIGIN);
-    }
     res.writeHead(404).end();
   });
 
@@ -217,7 +207,7 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
           vault: chain.vault,
           token: chain.token,
           explorer: chain.explorer,
-          paymasterUrl: config.PAYMASTER_URL ? `${publicUrl(req)}/paymaster` : undefined,
+          paymasterUrl: config.PAYMASTER_URL,
         },
       });
       if (mode === 'points') send({ type: 'balance', points: ledger.balance(p.address) });
