@@ -3,9 +3,13 @@ import type { Settlement } from '@/lib/game';
 /** What the last payout pool paid this player, until they dismiss it. */
 export function SettlementCard({
   settlement,
+  unit,
+  explorer,
   onDismiss,
 }: {
   settlement: Settlement;
+  unit: 'pts' | 'tBON';
+  explorer?: string;
   onDismiss: () => void;
 }) {
   const { you } = settlement;
@@ -21,7 +25,7 @@ export function SettlementCard({
             Pool #{settlement.epoch} settled:{' '}
             <span style={{ color: you.net >= 0 ? 'var(--human)' : 'var(--bot)' }}>
               {sign}
-              {you.net} pts
+              {you.net} {unit}
             </span>
           </p>
           <p className="mt-1 text-[var(--muted)]">
@@ -31,7 +35,22 @@ export function SettlementCard({
             wrong in the pool).
             {you.deception > 0 && ` Fooling your partner earned you +${you.deception}.`}
           </p>
-          <p className="mt-1 text-xs text-[var(--muted)]">Daily pool: {settlement.dailyPool} pts</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            Daily pool: {settlement.dailyPool} {unit}
+            {settlement.txHash && explorer && (
+              <>
+                {' · '}
+                <a
+                  href={`${explorer}/tx/${settlement.txHash}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline"
+                >
+                  payout transaction
+                </a>
+              </>
+            )}
+          </p>
         </div>
         <button
           onClick={onDismiss}

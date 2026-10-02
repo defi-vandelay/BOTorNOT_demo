@@ -22,14 +22,21 @@ export function Result({
   const now = useNow(1_000);
   const settleIn = secondsLeft(result.settlesAt, now);
   // A server without payout pools sends no settlesAt; then there is nothing to say about stakes.
+  const mode = state.welcome?.mode;
+  const stake = mode === 'tokens' ? `${STAKE_POINTS} tBON stake` : `${STAKE_POINTS}-point stake`;
+  const explorer = state.welcome?.onchain?.explorer;
   const stakeNote =
-    result.yourCall === null
-      ? 'No call, so your stake was refunded.'
-      : result.settlesAt === undefined
-        ? null
-        : settleIn > 0
-          ? `Your ${STAKE_POINTS}-point stake is in the pool, which settles in ${clock(settleIn)}.`
-          : 'The pool has closed.';
+    mode === 'free'
+      ? null
+      : result.yourCall === null
+        ? mode === 'tokens'
+          ? 'No call, so nothing was staked.'
+          : 'No call, so your stake was refunded.'
+        : result.settlesAt === undefined
+          ? null
+          : settleIn > 0
+            ? `Your ${stake} is in the pool, which settles in ${clock(settleIn)}.`
+            : 'The pool has closed.';
 
   useEffect(() => {
     if (!state.welcome || !state.receipt || !state.roundId || !address) return;
@@ -66,6 +73,22 @@ export function Result({
           )}
         </p>
         {stakeNote && <p className="mt-2 text-sm text-[var(--muted)]">{stakeNote}</p>}
+        {mode === 'tokens' && result.yourCall && (
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            {state.settleTx && explorer ? (
+              <a
+                href={`${explorer}/tx/${state.settleTx}`}
+                target="_blank"
+                rel="noreferrer"
+                className="underline"
+              >
+                Settled on-chain ↗
+              </a>
+            ) : (
+              'Settling on-chain…'
+            )}
+          </p>
+        )}
         {result.persona && (
           <p className="mt-4 rounded-xl bg-[var(--bubble-them)] px-4 py-3 text-sm">
             You were talking to <strong>{result.persona.name}</strong>: {result.persona.blurb}

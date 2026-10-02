@@ -20,3 +20,7 @@ packages/contracts/broadcast/
 packages/contracts/lib/
 .DS_Store
 next-env.d.ts
+
+# Written by next dev
+apps/web/AGENTS.md
+apps/web/CLAUDE.md

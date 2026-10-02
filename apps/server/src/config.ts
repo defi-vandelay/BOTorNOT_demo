@@ -19,8 +19,11 @@ const schema = z.object({
   DB_PATH: z.string().default('data/botornot.db'),
   /** Length of a payout pool. Shorten it (e.g. 60000) to see pools settle while testing. */
   EPOCH_MS: z.coerce.number().int().min(5_000).default(EPOCH_MS),
-  /** EIP-712 domain for commitment receipts. Base Sepolia; the vault address arrives in M3. */
+  /** Base Sepolia. Set GAME_VAULT_ADDRESS (pnpm deploy:testnet does it) to play on-chain. */
   CHAIN_ID: z.coerce.number().int().default(84532),
+  RPC_URL: z.string().url().default('https://sepolia.base.org'),
+  /** Coinbase paymaster (Base Sepolia). The server proxies it so the URL stays private. */
+  PAYMASTER_URL: z.string().url().optional(),
   GAME_VAULT_ADDRESS: z
     .string()
     .regex(/^0x[0-9a-fA-F]{40}$/)
@@ -36,6 +39,8 @@ export type Config = Omit<z.infer<typeof schema>, 'LLM_PROVIDER' | 'DEV_MODE'> &
   LLM_PROVIDER: 'anthropic' | 'mock';
   /** On by default outside production. */
   DEV_MODE: boolean;
+  /** A vault is configured: wallet players stake test tokens and rounds settle on-chain. */
+  ONCHAIN: boolean;
 };
 
 /** Reads config from env. Empty strings count as unset so a copied .env.example works as is. */
@@ -52,5 +57,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new Error('DEV_MODE=true is not allowed when NODE_ENV=production');
   }
   const devMode = parsed.DEV_MODE === undefined ? !production : parsed.DEV_MODE === 'true';
-  return { ...parsed, LLM_PROVIDER: provider, DEV_MODE: devMode };
+  const onchain = !/^0x0{40}$/.test(parsed.GAME_VAULT_ADDRESS);
+  if (onchain && !parsed.OPERATOR_PRIVATE_KEY) {
+    throw new Error('GAME_VAULT_ADDRESS needs OPERATOR_PRIVATE_KEY (the key that deployed it)');
+  }
+  return { ...parsed, LLM_PROVIDER: provider, DEV_MODE: devMode, ONCHAIN: onchain };
 }

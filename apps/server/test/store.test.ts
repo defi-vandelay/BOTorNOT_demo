@@ -51,7 +51,9 @@ describe('persistence across a restart', () => {
         roundId: `0x${'01'.repeat(32)}`,
         phase: 'done',
         kind: 'BOT',
-        judges: [{ seat: 0, call: 'NOT', correct: false }],
+        judges: [
+          { seat: 0, call: 'NOT', correct: false, answer: 'BOT', partnerId: '0x01', salt: '0x02' },
+        ],
         transcript: [],
         transcriptHash: `0x${'02'.repeat(32)}`,
       },

@@ -14,7 +14,9 @@
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r --filter '!@botornot/contracts' typecheck",
     "test": "pnpm -r --filter '!@botornot/contracts' test",
-    "test:contracts": "pnpm --filter @botornot/contracts test"
+    "test:contracts": "pnpm --filter @botornot/contracts test",
+    "compile:contracts": "pnpm --filter @botornot/contracts compile",
+    "deploy:testnet": "pnpm --filter @botornot/contracts deploy:testnet"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

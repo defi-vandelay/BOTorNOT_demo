@@ -65,3 +65,25 @@ export const commitmentReceiptTypes = {
 export function eip712Domain(chainId: number, verifyingContract: Address) {
   return { name: 'BOTorNOT', version: '1', chainId, verifyingContract } as const;
 }
+
+/** How long a wallet sign-in signature stays valid. */
+export const SIGN_IN_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** The message a wallet player signs to prove their address to the game server. */
+export function signInMessage(input: {
+  address: Address;
+  origin: string;
+  chainId: number;
+  issuedAt: number;
+}): string {
+  return [
+    'Sign in to BOT or NOT.',
+    '',
+    'This lets the game server stake for you within the session you approve. It costs nothing.',
+    '',
+    `Address: ${input.address}`,
+    `Site: ${input.origin}`,
+    `Chain: ${input.chainId}`,
+    `Issued: ${new Date(input.issuedAt).toISOString()}`,
+  ].join('\n');
+}

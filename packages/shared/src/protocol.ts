@@ -11,7 +11,14 @@ const bytes32 = hexOf(/^0x[0-9a-fA-F]{64}$/);
 // ---------- client -> server ----------
 
 export const clientMessage = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('hello'), address }),
+  z.object({
+    type: z.literal('hello'),
+    address,
+    /** Wallet players (on-chain mode): a signature over signInMessage(), proving the address. */
+    auth: z.object({ issuedAt: z.number().int(), signature: hex }).optional(),
+  }),
+  /** A wallet player deposited, withdrew or started a session: re-read their on-chain state. */
+  z.object({ type: z.literal('wallet.refresh') }),
   z.object({ type: z.literal('queue.join') }),
   z.object({ type: z.literal('queue.leave') }),
   z.object({ type: z.literal('chat.typing') }),
@@ -40,6 +47,21 @@ export const serverMessage = z.discriminatedUnion('type', [
     operator: address,
     chainId: z.number().int(),
     verifyingContract: address,
+    /**
+     * What this player plays for: off-chain points (no chain configured), test tokens (signed in
+     * with a wallet), or nothing (a guest while the chain is on: free play).
+     */
+    mode: z.enum(['points', 'tokens', 'free']),
+    /** Set when the game runs on-chain. */
+    onchain: z
+      .object({
+        vault: address,
+        token: address,
+        explorer: z.string(),
+        /** Where the wallet asks for gas sponsorship (the server's paymaster proxy), if any. */
+        paymasterUrl: z.string().optional(),
+      })
+      .optional(),
   }),
   z.object({ type: z.literal('queue.waiting') }),
   z.object({
@@ -71,23 +93,33 @@ export const serverMessage = z.discriminatedUnion('type', [
     /** When the payout pool holding this call closes; absent when nothing was staked (no call). */
     settlesAt: z.number().int().optional(),
   }),
-  /** The player's points balance (off-chain until M3). */
-  z.object({ type: z.literal('balance'), points: z.number().int() }),
+  /** What the player can stake: points, or whole test tokens in the vault (tokens mode). */
+  z.object({
+    type: z.literal('balance'),
+    points: z.number().int(),
+    /** Tokens mode: when the player's staking session ends (unix ms; 0 = none). */
+    sessionEndsAt: z.number().int().optional(),
+  }),
   /** A payout pool this player had calls in has closed. */
   z.object({
     type: z.literal('epoch.settled'),
     epoch: z.number().int(),
     rightCalls: z.number().int(),
     wrongCalls: z.number().int(),
-    profitPerRight: z.number().int(),
+    /** Points, or whole tokens rounded to 2 decimals on-chain. */
+    profitPerRight: z.number(),
     you: z.object({
       right: z.number().int(),
       wrong: z.number().int(),
-      deception: z.number().int(),
-      net: z.number().int(),
+      deception: z.number(),
+      net: z.number(),
     }),
-    dailyPool: z.number().int(),
+    dailyPool: z.number(),
+    /** On-chain: the transaction that paid this pool out. */
+    txHash: hex.optional(),
   }),
+  /** On-chain: the transaction that settled this player's call. */
+  z.object({ type: z.literal('round.settled'), roundId: bytes32, txHash: hex }),
   z.object({ type: z.literal('round.void'), reason: z.string() }),
   z.object({ type: z.literal('error'), message: z.string() }),
 ]);

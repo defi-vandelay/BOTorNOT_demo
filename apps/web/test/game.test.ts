@@ -44,6 +44,7 @@ describe('game reducer', () => {
       operator: `0x${'aa'.repeat(20)}`,
       chainId: 84532,
       verifyingContract: `0x${'00'.repeat(20)}`,
+      mode: 'points',
     } as const;
     const state = play(
       { type: 'connected', connected: true },
@@ -88,5 +89,34 @@ describe('serverHttpUrl', () => {
   it('turns the WebSocket URL into the HTTP base', () => {
     expect(serverHttpUrl('/stats', 'ws://localhost:8787/ws')).toBe('http://localhost:8787/stats');
     expect(serverHttpUrl('/pool', 'wss://game.example/ws')).toBe('https://game.example/pool');
+  });
+
+  it('shows the settle transaction for this round only', () => {
+    const roundId = `0x${'11'.repeat(32)}` as const;
+    const txHash = `0x${'22'.repeat(32)}` as const;
+    const base = play({ type: 'connected', connected: true });
+    const inRound = { ...base, roundId };
+    const other = reduce(inRound, {
+      type: 'server',
+      now: 0,
+      msg: { type: 'round.settled', roundId: `0x${'33'.repeat(32)}`, txHash },
+    });
+    expect(other.settleTx).toBeUndefined();
+    const mine = reduce(inRound, {
+      type: 'server',
+      now: 0,
+      msg: { type: 'round.settled', roundId, txHash },
+    });
+    expect(mine.settleTx).toBe(txHash);
+  });
+
+  it('forgets the last player when the identity changes', () => {
+    const state = play(
+      { type: 'connected', connected: true },
+      { type: 'server', now: 0, msg: { type: 'balance', points: 500, sessionEndsAt: 9 } },
+      { type: 'identity' },
+    );
+    expect(state.points).toBeUndefined();
+    expect(state.connected).toBe(true);
   });
 });
