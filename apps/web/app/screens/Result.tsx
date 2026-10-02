@@ -21,6 +21,15 @@ export function Result({
   const wasBot = result.answer === 'BOT';
   const now = useNow(1_000);
   const settleIn = secondsLeft(result.settlesAt, now);
+  // A server without payout pools sends no settlesAt; then there is nothing to say about stakes.
+  const stakeNote =
+    result.yourCall === null
+      ? 'No call, so your stake was refunded.'
+      : result.settlesAt === undefined
+        ? null
+        : settleIn > 0
+          ? `Your ${STAKE_POINTS}-point stake is in the pool, which settles in ${clock(settleIn)}.`
+          : 'The pool has closed.';
 
   useEffect(() => {
     if (!state.welcome || !state.receipt || !state.roundId || !address) return;
@@ -56,13 +65,7 @@ export function Result({
             <span className="text-[var(--muted)]"> You said {result.yourCall}.</span>
           )}
         </p>
-        <p className="mt-2 text-sm text-[var(--muted)]">
-          {result.settlesAt === undefined
-            ? 'No call, so your stake was refunded.'
-            : settleIn > 0
-              ? `Your ${STAKE_POINTS}-point stake is in the pool, which settles in ${clock(settleIn)}.`
-              : 'The pool has closed.'}
-        </p>
+        {stakeNote && <p className="mt-2 text-sm text-[var(--muted)]">{stakeNote}</p>}
         {result.persona && (
           <p className="mt-4 rounded-xl bg-[var(--bubble-them)] px-4 py-3 text-sm">
             You were talking to <strong>{result.persona.name}</strong>: {result.persona.blurb}
