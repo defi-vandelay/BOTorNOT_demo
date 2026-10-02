@@ -1,6 +1,14 @@
-import { CHAT_DURATION_MS, MAX_MESSAGE_CHARS, TURN_MS } from '@botornot/shared';
+import { CHAT_DURATION_MS, MAX_MESSAGE_CHARS, STAKE_POINTS, TURN_MS } from '@botornot/shared';
 
-export function Lobby({ ready, onFind }: { ready: boolean; onFind: () => void }) {
+export function Lobby({
+  ready,
+  error,
+  onFind,
+}: {
+  ready: boolean;
+  error?: string;
+  onFind: () => void;
+}) {
   return (
     <section className="flex flex-1 flex-col gap-8">
       <div>
@@ -20,6 +28,7 @@ export function Lobby({ ready, onFind }: { ready: boolean; onFind: () => void })
           `Take turns: one message each, up to ${MAX_MESSAGE_CHARS} characters.`,
           `You get ${TURN_MS / 1000} seconds per message.`,
           'When the chat ends, call it: BOT or NOT.',
+          `Each call stakes ${STAKE_POINTS} points. Right calls split the stakes of wrong ones, and fooling a human partner earns you a cut of theirs.`,
           'The answer was locked in before you said hello. Check it yourself at the end.',
         ].map((step, i) => (
           <li key={i} className="flex gap-3">
@@ -38,7 +47,14 @@ export function Lobby({ ready, onFind }: { ready: boolean; onFind: () => void })
       >
         Find a match
       </button>
-      <p className="-mt-4 text-center text-xs text-[var(--muted)]">Testnet demo. No real money.</p>
+      {error && (
+        <p className="-mt-4 text-center text-sm text-[var(--bot)]" role="alert">
+          {error === 'not enough points' ? 'Not enough points for another round.' : error}
+        </p>
+      )}
+      <p className="-mt-4 text-center text-xs text-[var(--muted)]">
+        Testnet demo. Points only, no real money.
+      </p>
     </section>
   );
 }

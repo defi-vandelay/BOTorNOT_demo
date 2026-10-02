@@ -52,4 +52,33 @@ describe('game reducer', () => {
     );
     expect(state).toMatchObject({ screen: 'lobby', connected: true, welcome });
   });
+
+  it('keeps the points balance and the last settlement across rounds', () => {
+    const settled = {
+      type: 'epoch.settled' as const,
+      epoch: 3,
+      rightCalls: 4,
+      wrongCalls: 2,
+      profitPerRight: 35,
+      you: { right: 1, wrong: 0, deception: 25, net: 60 },
+      dailyPool: 50,
+    };
+    const state = play(
+      { type: 'server', now: 0, msg: { type: 'balance', points: 900 } },
+      { type: 'server', now: 1, msg: settled },
+      { type: 'back-to-lobby' },
+    );
+    expect(state.points).toBe(900);
+    expect(state.settlement).toEqual(settled);
+    expect(reduce(state, { type: 'dismiss-settlement' }).settlement).toBeUndefined();
+  });
+
+  it('goes back to the lobby when turned away for lack of points', () => {
+    const state = play(
+      { type: 'queued' },
+      { type: 'server', now: 0, msg: { type: 'error', message: 'not enough points' } },
+    );
+    expect(state.screen).toBe('lobby');
+    expect(state.error).toBe('not enough points');
+  });
 });

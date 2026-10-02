@@ -78,6 +78,9 @@ export function useGame() {
       backToLobby() {
         dispatch({ type: 'back-to-lobby' });
       },
+      dismissSettlement() {
+        dispatch({ type: 'dismiss-settlement' });
+      },
     }),
     [send],
   );

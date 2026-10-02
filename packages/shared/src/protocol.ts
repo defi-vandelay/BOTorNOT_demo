@@ -68,6 +68,25 @@ export const serverMessage = z.discriminatedUnion('type', [
     persona: z.object({ name: z.string(), blurb: z.string() }).optional(),
     transcriptHash: bytes32,
     txHash: hex.optional(),
+    /** When the payout pool holding this call closes; absent when nothing was staked (no call). */
+    settlesAt: z.number().int().optional(),
+  }),
+  /** The player's points balance (off-chain until M3). */
+  z.object({ type: z.literal('balance'), points: z.number().int() }),
+  /** A payout pool this player had calls in has closed. */
+  z.object({
+    type: z.literal('epoch.settled'),
+    epoch: z.number().int(),
+    rightCalls: z.number().int(),
+    wrongCalls: z.number().int(),
+    profitPerRight: z.number().int(),
+    you: z.object({
+      right: z.number().int(),
+      wrong: z.number().int(),
+      deception: z.number().int(),
+      net: z.number().int(),
+    }),
+    dailyPool: z.number().int(),
   }),
   z.object({ type: z.literal('round.void'), reason: z.string() }),
   z.object({ type: z.literal('error'), message: z.string() }),

@@ -7,6 +7,7 @@ import { Chat } from './screens/Chat';
 import { CallScreen } from './screens/CallScreen';
 import { Result } from './screens/Result';
 import { Void } from './screens/Void';
+import { SettlementCard } from './screens/SettlementCard';
 
 export function Game() {
   const { state, actions, address } = useGame();
@@ -17,15 +18,28 @@ export function Game() {
         <h1 className="text-xl font-black tracking-tight">
           BOT <span className="text-[var(--muted)]">or</span> NOT
         </h1>
-        <span className="flex items-center gap-2 text-xs text-[var(--muted)]" aria-live="polite">
-          <span
-            className={`h-2 w-2 rounded-full ${state.welcome ? 'bg-green-500' : 'bg-red-500'}`}
-          />
-          {state.welcome ? 'Connected' : 'Connecting…'}
-        </span>
+        <div className="flex items-center gap-4 text-xs text-[var(--muted)]">
+          {state.points !== undefined && (
+            <span className="rounded-full border border-[var(--border)] px-3 py-1 font-semibold text-[var(--fg)]">
+              {state.points.toLocaleString()} pts
+            </span>
+          )}
+          <span className="flex items-center gap-2" aria-live="polite">
+            <span
+              className={`h-2 w-2 rounded-full ${state.welcome ? 'bg-green-500' : 'bg-red-500'}`}
+            />
+            {state.welcome ? 'Connected' : 'Connecting…'}
+          </span>
+        </div>
       </header>
 
-      {state.screen === 'lobby' && <Lobby ready={!!state.welcome} onFind={actions.findMatch} />}
+      {state.settlement && (state.screen === 'lobby' || state.screen === 'result') && (
+        <SettlementCard settlement={state.settlement} onDismiss={actions.dismissSettlement} />
+      )}
+
+      {state.screen === 'lobby' && (
+        <Lobby ready={!!state.welcome} error={state.error} onFind={actions.findMatch} />
+      )}
       {state.screen === 'waiting' && <Waiting onCancel={actions.cancel} />}
       {state.screen === 'chat' && (
         <Chat state={state} onSay={actions.say} onTyping={actions.typing} />

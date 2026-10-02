@@ -51,6 +51,8 @@ export interface RoundOptions {
   /** Shown to judges after the reveal when their partner was a bot. */
   persona?: { name: string; blurb: string };
   startingSeat?: 0 | 1;
+  /** When the payout pool this round's calls fall into closes, shown with the result. */
+  settlesAt?: () => number;
   onEnd?: (outcome: RoundOutcome) => void;
 }
 
@@ -195,6 +197,7 @@ export class Round {
         correct: call ? (call === 'BOT') === (judge.answer === 'BOT') : null,
         persona: judge.answer === 'BOT' ? this.opts.persona : undefined,
         transcriptHash: this.hash,
+        settlesAt: call ? this.opts.settlesAt?.() : undefined,
       });
     });
     this.finish('done');

@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import type { Address } from 'viem';
 import type { GameState } from '@/lib/game';
 import { verifyRound, type Verification } from '@/lib/verify';
+import { clock, secondsLeft, useNow } from '@/lib/useNow';
+import { STAKE_POINTS } from '@botornot/shared';
 
 export function Result({
   state,
@@ -17,6 +19,8 @@ export function Result({
   const result = state.result!;
   const [check, setCheck] = useState<Verification | null>(null);
   const wasBot = result.answer === 'BOT';
+  const now = useNow(1_000);
+  const settleIn = secondsLeft(result.settlesAt, now);
 
   useEffect(() => {
     if (!state.welcome || !state.receipt || !state.roundId || !address) return;
@@ -51,6 +55,13 @@ export function Result({
           {result.yourCall && (
             <span className="text-[var(--muted)]"> You said {result.yourCall}.</span>
           )}
+        </p>
+        <p className="mt-2 text-sm text-[var(--muted)]">
+          {result.settlesAt === undefined
+            ? 'No call, so your stake was refunded.'
+            : settleIn > 0
+              ? `Your ${STAKE_POINTS}-point stake is in the pool, which settles in ${clock(settleIn)}.`
+              : 'The pool has closed.'}
         </p>
         {result.persona && (
           <p className="mt-4 rounded-xl bg-[var(--bubble-them)] px-4 py-3 text-sm">

@@ -17,9 +17,18 @@ export const QUEUE_WAIT_MAX_MS = 12_000;
 
 /** Demo stake tier: 1 USDC (6 decimals). */
 export const STAKE_UNITS = 1_000_000n;
-/** House rake on each payout pool, in basis points. */
-export const RAKE_BPS = 500;
-/** Length of a payout pool. */
+/**
+ * Payout pool rules (plan doc 06 v2). Until M3 stakes are off-chain points; the on-chain
+ * stake in commitments stays STAKE_UNITS.
+ */
+export const STAKE_POINTS = 100;
+/** Points each new player starts with. */
+export const STARTING_POINTS = 1_000;
+/** Share of every forfeited stake kept as the fee, in basis points. */
+export const FEE_BPS = 500;
+/** Share of every forfeited stake paid to the human partner who fooled the caller, in basis points. */
+export const DECEPTION_BPS = 2_500;
+/** Default length of a payout pool (the server can shorten it for testing). */
 export const EPOCH_MS = 600_000;
 
 export const PARTNER_TYPE = { HUMAN: 0, BOT: 1 } as const;
