@@ -22,6 +22,7 @@ export class BotSeat implements Seat {
   private round?: Round;
   private seat: 0 | 1 = 1;
   private lines: Line[] = [];
+  private usedDeflections = new Set<string>();
   /** Bumped whenever the bot's turn ends, so a reply that arrives late is dropped. */
   private turnToken = 0;
 
@@ -61,6 +62,7 @@ export class BotSeat implements Seat {
       lines: this.lines,
       note: contextNote(this.persona, this.headlines()),
       llm: this.llm,
+      usedDeflections: this.usedDeflections,
     });
     if (token !== this.turnToken) return;
 
