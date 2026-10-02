@@ -52,7 +52,9 @@ Without an `ANTHROPIC_API_KEY` the server uses a mock bot with canned replies, s
 - `pnpm --filter @botornot/server red-team` sends the prompts in `apps/server/src/bots/redteam.ts` (jailbreaks, offensive asks, personal data, crisis messages, classic bot tests) through the bot pipeline and marks anything to check by hand.
 - `pnpm --filter @botornot/server judge-experiment --judges 5 --rounds 4` has AI judges (`JUDGE_MODEL`) play the house bots and reports how often they spot them. Takes about 10 minutes.
 
-**Stats:** http://localhost:8787/stats shows rounds played, the human/bot split and how often the bot fooled people (in memory until M2 adds a database).
+**Stats:** http://localhost:3000/stats shows rounds played, the human/bot split, how often bots and humans fooled people, the fool rate of each bot persona and the payout pools. The raw numbers are at http://localhost:8787/stats and http://localhost:8787/pool.
+
+**Saved data:** points, payout pools and stats are kept in `apps/server/data/botornot.db` (SQLite, built into Node 22.13+, so nothing to install), so they survive a restart. Delete the file to start fresh. Node prints a one-line "SQLite is an experimental feature" warning at startup; that's expected.
 
 `.env` files are git-ignored. **Never commit keys**: this repository is public.
 

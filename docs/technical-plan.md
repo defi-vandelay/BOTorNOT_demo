@@ -29,7 +29,7 @@ botornot_demo/
 │  │     │  ├─ gateway.ts      LlmGateway interface + factory
 │  │     │  ├─ anthropic.ts    Claude provider
 │  │     │  └─ mock.ts         deterministic provider for tests / no key
-│  │     ├─ db/                Drizzle schema + SQLite client
+│  │     ├─ store.ts           SQLite persistence (node:sqlite)
 │  │     └─ chain/             (M3) viem clients, settlement worker
 │  ├─ web/                 Next.js app (lobby, play, result, stats)
 ├─ packages/
@@ -100,7 +100,9 @@ JSON messages, validated with zod on both ends. The server never sends anything 
 | `round.void`    | `reason`                                                                                                                       |
 | `error`         | `message`                                                                                                                      |
 
-## 5. Data model (SQLite via Drizzle; Postgres in the beta)
+## 5. Data model (SQLite; Postgres in the beta)
+
+_M2 note: persistence uses Node's built-in `node:sqlite` behind one small `Store` class instead of Drizzle, so there is no native module to build on Windows. The tables are `players`, `rounds`, `pending_calls`, `epochs` and `meta`; moving to Postgres for the beta means re-implementing `Store`._
 
 | Table          | Key columns                                                                                                                |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------- |

@@ -37,7 +37,7 @@ if (config.LLM_PROVIDER === 'mock') {
 }
 
 const server = startServer(
-  { ...config, PORT: 0, BOT_SHARE: 1, DEV_MODE: true },
+  { ...config, PORT: 0, BOT_SHARE: 1, DEV_MODE: true, DB_PATH: ':memory:' },
   { llm: createGateway(config), log: () => {} },
 );
 await new Promise((resolve) => server.http.once('listening', resolve));

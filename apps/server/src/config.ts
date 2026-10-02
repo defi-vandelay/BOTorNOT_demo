@@ -15,6 +15,8 @@ const schema = z.object({
   DEV_MODE: z.enum(['true', 'false']).optional(),
   /** Share of matches given to a bot. Set to 0 to always try for a human (testing with two windows). */
   BOT_SHARE: z.coerce.number().min(0).max(1).default(0.5),
+  /** SQLite file for points, pools and stats. ":memory:" keeps nothing between restarts. */
+  DB_PATH: z.string().default('data/botornot.db'),
   /** Length of a payout pool. Shorten it (e.g. 60000) to see pools settle while testing. */
   EPOCH_MS: z.coerce.number().int().min(5_000).default(EPOCH_MS),
   /** EIP-712 domain for commitment receipts. Base Sepolia; the vault address arrives in M3. */

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useGame } from '@/lib/useGame';
 import { Lobby } from './screens/Lobby';
 import { Waiting } from './screens/Waiting';
@@ -19,6 +20,9 @@ export function Game() {
           BOT <span className="text-[var(--muted)]">or</span> NOT
         </h1>
         <div className="flex items-center gap-4 text-xs text-[var(--muted)]">
+          <Link href="/stats" className="underline">
+            Stats
+          </Link>
           {state.points !== undefined && (
             <span className="rounded-full border border-[var(--border)] px-3 py-1 font-semibold text-[var(--fg)]">
               {state.points.toLocaleString()} pts

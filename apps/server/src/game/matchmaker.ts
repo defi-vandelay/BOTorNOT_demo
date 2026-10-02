@@ -112,7 +112,7 @@ export class Matchmaker {
         starts.push(this.startHumanRound(entry.player, entry.partner.player));
       } else {
         this.remove(entry);
-        if (!entry.wantsBot) this.deps.stats.fallbacks++;
+        if (!entry.wantsBot) this.deps.stats.fallback();
         starts.push(this.startBotRound(entry.player));
       }
     }
