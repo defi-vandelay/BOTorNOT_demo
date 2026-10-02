@@ -89,7 +89,9 @@ export function WalletPanel({
   // The server wants at least a few minutes left on a session before it stakes a new round.
   const sessionOk = sessionEndsAt > Date.now() + 10 * 60_000;
   const needsTokens = inGame < STAKE_POINTS;
-  const canTopUp = (faucetReady && needsTokens) || inWallet > 0 || !sessionOk;
+  // A paymaster for the wrong network fails every batch, so don't offer them until it's fixed.
+  const canSend = !onchain.paymasterIssue;
+  const canTopUp = canSend && ((faucetReady && needsTokens) || inWallet > 0 || !sessionOk);
   const topUp = () =>
     run('topping up', () =>
       sendCalls(
@@ -153,7 +155,7 @@ export function WalletPanel({
             {busy === 'topping up' ? 'Confirm in your wallet…' : topUpLabel}
           </button>
         )}
-        {inGame > 0 && (
+        {canSend && inGame > 0 && (
           <button
             onClick={() =>
               void run('withdrawing', () =>
@@ -179,10 +181,16 @@ export function WalletPanel({
         </p>
       )}
       {error && <p className="mt-2 text-[var(--bot)]">{error}</p>}
-      {!onchain.paymasterUrl && (
+      {!onchain.paymasterUrl ? (
         <p className="mt-2 text-xs text-[var(--bot)]">
           Gas sponsorship is off: set PAYMASTER_URL in apps/server/.env and restart the server.
         </p>
+      ) : (
+        onchain.paymasterIssue && (
+          <p className="mt-2 text-xs text-[var(--bot)]">
+            {onchain.paymasterIssue} Then restart the server.
+          </p>
+        )
       )}
       <p className="mt-3 text-xs text-[var(--muted)]">
         Base Sepolia testnet. tBON is a test token with no value.
@@ -194,5 +202,8 @@ export function WalletPanel({
 function friendly(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
   if (/reject|denied|cancel/i.test(msg)) return 'Cancelled in the wallet.';
+  if (/chain.*not supported|unsupported chain/i.test(msg)) {
+    return 'The wallet refused Base Sepolia. Check PAYMASTER_URL is the Base Sepolia one (it contains /base-sepolia/).';
+  }
   return msg.split('\n')[0]!.slice(0, 160);
 }

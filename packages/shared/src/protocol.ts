@@ -60,6 +60,8 @@ export const serverMessage = z.discriminatedUnion('type', [
         explorer: z.string(),
         /** Where the wallet asks for gas sponsorship (the Coinbase paymaster), if any. */
         paymasterUrl: z.string().optional(),
+        /** Why that paymaster won't work (e.g. it's for the wrong network), if the server can tell. */
+        paymasterIssue: z.string().optional(),
       })
       .optional(),
   }),

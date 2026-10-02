@@ -17,6 +17,7 @@ import { operatorAccount } from './operator';
 import { Headlines } from './bots/context';
 import { Store } from './store';
 import { Chain } from './chain/chain';
+import { paymasterProblem } from './chain/paymaster';
 import type { Bank } from './game/bank';
 import { OnchainBank } from './game/onchain-bank';
 
@@ -118,6 +119,12 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
     );
     chainReady.catch(() => undefined);
   }
+  // Checked once at startup; players see the problem next to the button it breaks.
+  const paymasterChecked: Promise<string | undefined> =
+    chain && config.PAYMASTER_URL
+      ? paymasterProblem(config.PAYMASTER_URL, config.CHAIN_ID)
+      : Promise.resolve(undefined);
+  void paymasterChecked.then((problem) => problem && log(`paymaster: ${problem}`));
   const bank: Bank = onchain ?? ledger;
   const tokenBalance = (address: string): ServerMessage => ({
     type: 'balance',
@@ -183,7 +190,11 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
         else if (msg.auth) send({ type: 'error', message: 'wallet sign-in failed' });
       }
       // Read the wallet's balance and session before the welcome, so a join right after works.
-      if (mode === 'tokens') await refreshWallet(msg.address, false);
+      let paymasterIssue: string | undefined;
+      if (mode === 'tokens') {
+        await refreshWallet(msg.address, false);
+        paymasterIssue = await paymasterChecked;
+      }
       if (ws.readyState !== ws.OPEN) return;
       const p: Player = {
         id: `p${nextId++}`,
@@ -208,6 +219,7 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
           token: chain.token,
           explorer: chain.explorer,
           paymasterUrl: config.PAYMASTER_URL,
+          paymasterIssue,
         },
       });
       if (mode === 'points') send({ type: 'balance', points: ledger.balance(p.address) });
