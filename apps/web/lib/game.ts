@@ -10,6 +10,7 @@ export interface ChatLine {
 
 export type RoundResult = Extract<ServerMessage, { type: 'round.result' }>;
 export type Welcome = Extract<ServerMessage, { type: 'welcome' }>;
+export type Settlement = Extract<ServerMessage, { type: 'epoch.settled' }>;
 
 export interface GameState {
   connected: boolean;
@@ -26,6 +27,10 @@ export interface GameState {
   result?: RoundResult;
   voidReason?: string;
   error?: string;
+  /** Points balance; survives between rounds. */
+  points?: number;
+  /** The latest payout pool this player had calls in, until dismissed. */
+  settlement?: Settlement;
 }
 
 export type Action =
@@ -34,7 +39,8 @@ export type Action =
   | { type: 'queued' }
   | { type: 'left-queue' }
   | { type: 'called'; call: Call }
-  | { type: 'back-to-lobby' };
+  | { type: 'back-to-lobby' }
+  | { type: 'dismiss-settlement' };
 
 export const initialState: GameState = { connected: false, screen: 'lobby', lines: [] };
 
@@ -52,7 +58,9 @@ export function reduce(state: GameState, action: Action): GameState {
     case 'called':
       return { ...state, myCall: action.call };
     case 'back-to-lobby':
-      return { ...initialState, connected: state.connected, welcome: state.welcome };
+      return { ...initialState, ...kept(state) };
+    case 'dismiss-settlement':
+      return { ...state, settlement: undefined };
     case 'server':
       return onServer(state, action.msg, action.now);
   }
@@ -67,8 +75,7 @@ function onServer(state: GameState, msg: ServerMessage, now: number): GameState 
     case 'match.found':
       return {
         ...initialState,
-        connected: state.connected,
-        welcome: state.welcome,
+        ...kept(state),
         screen: 'chat',
         roundId: msg.roundId,
         receipt: msg.receipt,
@@ -90,9 +97,21 @@ function onServer(state: GameState, msg: ServerMessage, now: number): GameState 
       return { ...state, screen: 'result', result: msg };
     case 'round.void':
       return { ...state, screen: 'void', voidReason: msg.reason };
+    case 'balance':
+      return { ...state, points: msg.points };
+    case 'epoch.settled':
+      return { ...state, settlement: msg };
     case 'error':
+      // Turned away from the queue: back to the lobby, where the message is shown.
+      if (state.screen === 'waiting') return { ...state, screen: 'lobby', error: msg.message };
       return { ...state, error: msg.message };
   }
+}
+
+/** What carries over from one round to the next. */
+function kept(state: GameState): Partial<GameState> {
+  const { connected, welcome, points, settlement } = state;
+  return { connected, welcome, points, settlement };
 }
 
 /** The partner's "typing…" shows for this long after their last keystroke ping. */

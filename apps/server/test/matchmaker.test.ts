@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { privateKeyToAccount } from 'viem/accounts';
-import { QUEUE_WAIT_MAX_MS, QUEUE_WAIT_MIN_MS } from '@botornot/shared';
+import {
+  CALL_WINDOW_MS,
+  CHAT_DURATION_MS,
+  QUEUE_WAIT_MAX_MS,
+  QUEUE_WAIT_MIN_MS,
+  STARTING_POINTS,
+} from '@botornot/shared';
 import { CommitService } from '../src/game/commit';
+import { Ledger } from '../src/game/ledger';
 import { Matchmaker, type Player } from '../src/game/matchmaker';
 import { Stats } from '../src/game/stats';
 import { MockGateway } from '../src/llm/mock';
@@ -25,15 +32,17 @@ function player(n: number, ip = `10.0.0.${n}`): Player & { seat: RecordingSeat }
 
 function matchmaker(botShare: number, allowSameIp = false) {
   const stats = new Stats();
+  const ledger = new Ledger({ epochMs: 600_000 });
   const mm = new Matchmaker({
     commit,
     llm: new MockGateway(),
     stats,
+    ledger,
     botShare,
     allowSameIp,
     log: () => {},
   });
-  return { mm, stats };
+  return { mm, stats, ledger };
 }
 
 beforeEach(() => vi.useFakeTimers());
@@ -96,5 +105,67 @@ describe('Matchmaker', () => {
     mm.leave(a);
     await mm.tick(Date.now() + QUEUE_WAIT_MAX_MS);
     expect(a.current).toBeUndefined();
+  });
+
+  it('takes stakes at the start and settles calls with their partner at epoch close', async () => {
+    const { mm, ledger } = matchmaker(0);
+    const a = player(1);
+    const b = player(2);
+    const c = player(3);
+    mm.join(a);
+    mm.join(b);
+    await mm.tick(Date.now() + QUEUE_WAIT_MAX_MS);
+    mm.join(c); // no human left for c: a bot round
+    await mm.tick(Date.now() + 2 * QUEUE_WAIT_MAX_MS);
+    const stake = ledger.rules.stake;
+    expect(ledger.balance(a.address)).toBe(STARTING_POINTS - stake);
+    expect(a.seat.last('balance')?.points).toBe(STARTING_POINTS - stake);
+
+    vi.advanceTimersByTime(CHAT_DURATION_MS);
+    a.current!.round.submitCall(a.current!.seat, 'NOT'); // right, and fooled b
+    b.current!.round.submitCall(b.current!.seat, 'BOT'); // wrong
+    c.current!.round.submitCall(c.current!.seat, 'BOT'); // right
+    expect(a.seat.last('round.result')?.settlesAt).toBe(ledger.epochEndsAt);
+    expect(ledger.pendingCalls).toBe(3);
+
+    const s = ledger.closeEpoch();
+    // b's forfeit: 5 fee, 25 to a for the deception, 70 split between a and c.
+    expect(s.players[a.address.toLowerCase()]).toMatchObject({ deception: 25, net: 35 + 25 });
+    expect(ledger.balance(a.address)).toBe(STARTING_POINTS + 60);
+    expect(ledger.balance(b.address)).toBe(STARTING_POINTS - stake);
+    expect(ledger.balance(c.address)).toBe(STARTING_POINTS + 35);
+  });
+
+  it('refunds a no-call', async () => {
+    const { mm, ledger } = matchmaker(1);
+    const a = player(1);
+    mm.join(a);
+    await mm.tick(Date.now() + QUEUE_WAIT_MAX_MS);
+    vi.advanceTimersByTime(CHAT_DURATION_MS + CALL_WINDOW_MS);
+    expect(a.current).toBeUndefined();
+    expect(ledger.balance(a.address)).toBe(STARTING_POINTS);
+    expect(ledger.pendingCalls).toBe(0);
+  });
+
+  it('refunds both players when a human round is void', async () => {
+    const { mm, ledger } = matchmaker(0);
+    const a = player(1);
+    const b = player(2);
+    mm.join(a);
+    mm.join(b);
+    await mm.tick(Date.now() + QUEUE_WAIT_MAX_MS);
+    a.current!.round.leave(a.current!.seat);
+    expect(ledger.balance(a.address)).toBe(STARTING_POINTS);
+    expect(ledger.balance(b.address)).toBe(STARTING_POINTS);
+  });
+
+  it('turns away a player who cannot cover the stake', async () => {
+    const { mm, ledger } = matchmaker(1);
+    const a = player(1);
+    while (ledger.stake(a.address));
+    mm.join(a);
+    await mm.tick(Date.now() + QUEUE_WAIT_MAX_MS);
+    expect(a.current).toBeUndefined();
+    expect(a.seat.last('error')?.message).toBe('not enough points');
   });
 });

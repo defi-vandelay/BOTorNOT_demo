@@ -23,4 +23,14 @@ describe('loadConfig', () => {
   it('refuses anthropic without a key', () => {
     expect(() => loadConfig({ LLM_PROVIDER: 'anthropic' })).toThrow(/ANTHROPIC_API_KEY/);
   });
+
+  it('turns dev mode on by default outside production only', () => {
+    expect(loadConfig({}).DEV_MODE).toBe(true);
+    expect(loadConfig({ NODE_ENV: 'production' }).DEV_MODE).toBe(false);
+    expect(loadConfig({ DEV_MODE: 'false' }).DEV_MODE).toBe(false);
+  });
+
+  it('refuses to start with dev mode on in production', () => {
+    expect(() => loadConfig({ NODE_ENV: 'production', DEV_MODE: 'true' })).toThrow(/DEV_MODE/);
+  });
 });

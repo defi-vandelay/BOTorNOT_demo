@@ -4,6 +4,7 @@ import { parseClientMessage, type ServerMessage } from '@botornot/shared';
 import type { Config } from './config';
 import type { LlmGateway } from './llm/gateway';
 import { CommitService } from './game/commit';
+import { Ledger } from './game/ledger';
 import { Matchmaker, type Player } from './game/matchmaker';
 import { Stats } from './game/stats';
 import { operatorAccount } from './operator';
@@ -12,6 +13,7 @@ export interface GameServer {
   http: Server;
   matchmaker: Matchmaker;
   stats: Stats;
+  ledger: Ledger;
   close(): Promise<void>;
 }
 
@@ -32,10 +34,39 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
   const operator = operatorAccount(config.OPERATOR_PRIVATE_KEY);
   const commit = new CommitService(operator, config.CHAIN_ID, config.GAME_VAULT_ADDRESS);
   const stats = new Stats();
+  const players = new Set<Player>();
+  const ledger = new Ledger({
+    epochMs: config.EPOCH_MS,
+    refillWhenBroke: config.DEV_MODE,
+    onSettled: (epoch, settlement) => {
+      if (settlement.rightCalls + settlement.wrongCalls === 0) return;
+      log(
+        `epoch ${epoch} settled: ${settlement.rightCalls} right, ${settlement.wrongCalls} wrong, ` +
+          `+${settlement.profitPerRight} per right call, ${settlement.toDailyPool} to daily pool`,
+      );
+      for (const p of players) {
+        const you = settlement.players[p.address.toLowerCase()];
+        if (!you || !p.connected) continue;
+        const { right, wrong, deception, net } = you;
+        p.seat.deliver({
+          type: 'epoch.settled',
+          epoch,
+          rightCalls: settlement.rightCalls,
+          wrongCalls: settlement.wrongCalls,
+          profitPerRight: settlement.profitPerRight,
+          you: { right, wrong, deception, net },
+          dailyPool: ledger.dailyPool,
+        });
+        p.seat.deliver({ type: 'balance', points: ledger.balance(p.address) });
+      }
+    },
+  });
+  ledger.start();
   const matchmaker = new Matchmaker({
     commit,
     llm: deps.llm,
     stats,
+    ledger,
     botShare: config.BOT_SHARE,
     allowSameIp: config.DEV_MODE,
     log,
@@ -52,6 +83,7 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
     };
     if (req.url === '/health') return json({ ok: true, llm: config.LLM_PROVIDER });
     if (req.url === '/stats') return json(stats);
+    if (req.url === '/pool') return json(ledger);
     res.writeHead(404).end();
   });
 
@@ -82,14 +114,17 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
           seat: { kind: 'human', deliver: send },
           connected: true,
         };
+        players.add(player);
         log(`player ${player.id} connected as ${msg.address}`);
-        return send({
+        send({
           type: 'welcome',
           playerId: player.id,
           operator: commit.operatorAddress,
           chainId: config.CHAIN_ID,
           verifyingContract: config.GAME_VAULT_ADDRESS,
         });
+        send({ type: 'balance', points: ledger.balance(player.address) });
+        return;
       }
       if (!player) return send({ type: 'error', message: 'say hello first' });
       const current = player.current;
@@ -97,6 +132,9 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
       switch (msg.type) {
         case 'queue.join':
           if (current) return send({ type: 'error', message: 'already in a round' });
+          if (!ledger.canStake(player.address)) {
+            return send({ type: 'error', message: 'not enough points' });
+          }
           matchmaker.join(player);
           return send({ type: 'queue.waiting' });
         case 'queue.leave':
@@ -119,6 +157,7 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
     ws.on('close', () => {
       if (!player) return;
       player.connected = false;
+      players.delete(player);
       matchmaker.leave(player);
       player.current?.round.leave(player.current.seat);
       log(`player ${player.id} disconnected`);
@@ -131,9 +170,11 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
     http,
     matchmaker,
     stats,
+    ledger,
     close: () =>
       new Promise((resolve) => {
         matchmaker.stop();
+        ledger.stop();
         for (const client of wss.clients) client.terminate();
         wss.close(() => http.close(() => resolve()));
       }),

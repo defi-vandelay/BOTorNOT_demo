@@ -52,7 +52,9 @@ Tooling: pnpm workspaces, TypeScript (strict), ESLint (flat config) + Prettier, 
 | `BOT_TARGET_SHARE`  | 0.5                | operator ratio                                     |
 | `QUEUE_WAIT_MS`     | 3 000 to 12 000    | random wait, same distribution for humans and bots |
 | `STAKE`             | 1 USDC (1e6 units) | one tier                                           |
-| `RAKE_BPS`          | 500                | 5%                                                 |
+| `STAKE_POINTS`      | 100                | off-chain points stake until M3 (start: 1 000)     |
+| `FEE_BPS`           | 500                | 5% of each forfeited stake (plan doc 06 v2)        |
+| `DECEPTION_BPS`     | 2 500              | 25% of a forfeit to the human partner who fooled   |
 | `EPOCH_MS`          | 600 000            | 10-minute payout pools                             |
 
 ## 3. Round lifecycle

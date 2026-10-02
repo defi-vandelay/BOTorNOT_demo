@@ -41,6 +41,10 @@ Without an `ANTHROPIC_API_KEY` the server uses a mock bot with canned replies, s
 
 **Playing yourself:** open two browser windows and press Find a match in both. Each match is a bot half the time, so to force the two windows to meet, set `BOT_SHARE=0` in `apps/server/.env` and restart. A window with no human free gets a bot anyway, as in the real game.
 
+**Simulated players:** with the server running, `pnpm sim` (in a second terminal) connects four simulated players that chat, call and requeue like people do: some honest, some "tricksters" who act like bots to fool their partner, some sharp judges. Press Find a match in your browser and you'll meet them (or a house bot). Options: `pnpm sim --players 8`, `pnpm sim --styles trickster`. With an `ANTHROPIC_API_KEY` they talk using `SIM_MODEL` (Claude Haiku by default); without one they send canned lines and call at random. The simulator only connects to a local server, and dev mode (which it needs) can't be switched on in production.
+
+**Points and payout pools:** every call stakes 100 points (new players start with 1,000). Calls settle together when the payout pool closes (every 10 minutes; set `EPOCH_MS=60000` to watch it faster): wrong calls forfeit their stake, 5% is the fee, 25% goes to a human partner who fooled the caller, and the rest is split between right calls. The rules are in `packages/shared/src/settlement.ts`; http://localhost:8787/pool shows the current pool and the daily pool.
+
 **Stats:** http://localhost:8787/stats shows rounds played, the human/bot split and how often the bot fooled people (in memory until M2 adds a database).
 
 `.env` files are git-ignored. **Never commit keys**: this repository is public.

@@ -10,7 +10,8 @@ import type { LlmGateway } from '../llm/gateway';
 import { BotSeat } from '../bots/runtime';
 import { pickPersona } from '../bots/personas';
 import type { CommitService } from './commit';
-import { Round, type Seat } from './round';
+import type { Ledger } from './ledger';
+import { Round, type RoundOutcome, type Seat } from './round';
 import type { Stats } from './stats';
 
 export interface Player {
@@ -35,6 +36,8 @@ export interface MatchmakerDeps {
   commit: CommitService;
   llm: LlmGateway;
   stats: Stats;
+  /** Points ledger and payout pools; without one, rounds are played for nothing. */
+  ledger?: Ledger;
   /** Share of matches that should be bots (operator ratio). */
   botShare: number;
   /** Allow two players from the same IP to match (two windows on one machine). */
@@ -144,6 +147,7 @@ export class Matchmaker {
       for (const p of [a, b]) if (p.connected) this.join(p);
       return;
     }
+    if (!this.takeStakes(a, b)) return;
     const round = new Round({
       roundId,
       seats: [a.seat, b.seat],
@@ -151,10 +155,12 @@ export class Matchmaker {
         { answer: 'HUMAN', partnerId: humanPartnerId(b.address), commitment: ca },
         { answer: 'HUMAN', partnerId: humanPartnerId(a.address), commitment: cb },
       ],
+      settlesAt: () => this.deps.ledger?.epochEndsAt ?? 0,
       onEnd: (outcome) => {
         a.current = undefined;
         b.current = undefined;
         this.deps.stats.record(outcome);
+        this.settle(outcome, [a, b]);
       },
     });
     a.current = { round, seat: 0 };
@@ -173,7 +179,7 @@ export class Matchmaker {
       partnerType: 'BOT',
       partnerId,
     });
-    if (!player.connected) return;
+    if (!player.connected || !this.takeStakes(player)) return;
     const bot = new BotSeat(persona, this.deps.llm);
     // The human's seat number is random too, so seat order can't hint at anything.
     const humanSeat: 0 | 1 = this.rng() < 0.5 ? 0 : 1;
@@ -185,14 +191,75 @@ export class Matchmaker {
       seats,
       judges: humanSeat === 0 ? [judge, null] : [null, judge],
       persona: { name: persona.name, blurb: persona.blurb },
+      settlesAt: () => this.deps.ledger?.epochEndsAt ?? 0,
       onEnd: (outcome) => {
         player.current = undefined;
         this.deps.stats.record(outcome, persona.id);
+        const seats: [Player | null, Player | null] =
+          humanSeat === 0 ? [player, null] : [null, player];
+        this.settle(outcome, seats);
       },
     });
     bot.attach(round, botSeat);
     player.current = { round, seat: humanSeat };
     this.log(`round ${roundId.slice(0, 10)}: ${player.id} vs bot ${persona.id}`);
     round.start();
+  }
+
+  /** Takes every player's stake, or none of them. */
+  private takeStakes(...players: Player[]): boolean {
+    const ledger = this.deps.ledger;
+    if (!ledger) return true;
+    const taken: Player[] = [];
+    for (const p of players) {
+      if (!ledger.stake(p.address)) {
+        for (const t of taken) ledger.refund(t.address);
+        for (const q of players) {
+          if (q === p) q.seat.deliver({ type: 'error', message: 'not enough points' });
+          else if (q.connected) this.join(q);
+        }
+        this.sendBalances(taken);
+        return false;
+      }
+      taken.push(p);
+    }
+    this.sendBalances(players);
+    return true;
+  }
+
+  /**
+   * Hands a finished round's calls to the payout pool. A void or a no-call is refunded; every
+   * other call is recorded with its partner (human rounds), so deception shares can be paid.
+   */
+  private settle(outcome: RoundOutcome, seats: [Player | null, Player | null]): void {
+    const ledger = this.deps.ledger;
+    if (!ledger) return;
+    const judged = new Map(outcome.judges.map((j) => [j.seat, j]));
+    seats.forEach((player, i) => {
+      if (!player) return;
+      const judge = judged.get(i as 0 | 1);
+      if (outcome.phase === 'void' || !judge || judge.correct === null) {
+        ledger.refund(player.address);
+        return;
+      }
+      const partner = seats[i === 0 ? 1 : 0];
+      ledger.record({
+        player: player.address,
+        partnerType: outcome.kind,
+        correct: judge.correct,
+        partner: partner
+          ? { player: partner.address, correct: judged.get(i === 0 ? 1 : 0)?.correct ?? null }
+          : undefined,
+      });
+    });
+    this.sendBalances(seats.filter((p): p is Player => !!p));
+  }
+
+  private sendBalances(players: Player[]): void {
+    const ledger = this.deps.ledger;
+    if (!ledger) return;
+    for (const p of players) {
+      if (p.connected) p.seat.deliver({ type: 'balance', points: ledger.balance(p.address) });
+    }
   }
 }
