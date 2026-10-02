@@ -48,9 +48,21 @@ const DEFLECTIONS: Record<DeflectionKind, string[]> = {
   ],
 };
 
-export function deflection(kind: DeflectionKind = 'general', rng: () => number = Math.random) {
-  const list = DEFLECTIONS[kind];
-  return list[Math.floor(rng() * list.length)]!;
+/**
+ * Picks a deflection of the given kind. Pass the round's `used` set so the same line is never said
+ * twice in one chat (a repeated brush-off is a tell); it falls back to any line once all are used.
+ */
+export function deflection(
+  kind: DeflectionKind = 'general',
+  rng: () => number = Math.random,
+  used?: Set<string>,
+) {
+  const all = DEFLECTIONS[kind];
+  const fresh = used ? all.filter((d) => !used.has(d)) : all;
+  const list = fresh.length ? fresh : all;
+  const pick = list[Math.floor(rng() * list.length)]!;
+  used?.add(pick);
+  return pick;
 }
 
 /** Which deflection fits a screened-out message. */

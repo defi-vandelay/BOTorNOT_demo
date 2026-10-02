@@ -16,6 +16,8 @@ export interface TurnInput {
   note: string;
   llm: LlmGateway;
   rng?: () => number;
+  /** Deflections already said this round, so none repeats. */
+  usedDeflections?: Set<string>;
 }
 
 /** The partner's messages since the bot last spoke: the part that hasn't been screened yet. */
@@ -44,7 +46,7 @@ async function screen(llm: LlmGateway, text: string): Promise<Classification> {
  * A self-harm flag on the partner's message triggers break-glass instead of any reply.
  */
 export async function nextBotAction(input: TurnInput): Promise<BotAction> {
-  const { persona, lines, note, llm, rng } = input;
+  const { persona, lines, note, llm, rng, usedDeflections: used } = input;
   const incoming = unscreenedPartnerText(lines);
   const [inputCheck, reply] = await Promise.all([
     incoming ? screen(llm, incoming) : Promise.resolve<Classification | null>(null),
@@ -61,7 +63,7 @@ export async function nextBotAction(input: TurnInput): Promise<BotAction> {
     if (inputCheck.category === 'self_harm') return { kind: 'break-glass', category: 'self_harm' };
     return {
       kind: 'say',
-      text: deflection(deflectionKind(inputCheck.category), rng),
+      text: deflection(deflectionKind(inputCheck.category), rng, used),
       source: 'deflection',
       reason: `input:${inputCheck.category}`,
     };
@@ -69,7 +71,7 @@ export async function nextBotAction(input: TurnInput): Promise<BotAction> {
   if (!reply) {
     return {
       kind: 'say',
-      text: deflection('general', rng),
+      text: deflection('general', rng, used),
       source: 'deflection',
       reason: 'no-reply',
     };
@@ -78,7 +80,7 @@ export async function nextBotAction(input: TurnInput): Promise<BotAction> {
   if (outputCheck.flagged) {
     return {
       kind: 'say',
-      text: deflection(deflectionKind(outputCheck.category), rng),
+      text: deflection(deflectionKind(outputCheck.category), rng, used),
       source: 'deflection',
       reason: `output:${outputCheck.category}`,
     };
