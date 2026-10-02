@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { initialState, reduce, type GameState } from '../lib/game';
+import { serverHttpUrl } from '../lib/serverHttp';
 
 const roundId = `0x${'11'.repeat(32)}` as const;
 
@@ -80,5 +81,12 @@ describe('game reducer', () => {
     );
     expect(state.screen).toBe('lobby');
     expect(state.error).toBe('not enough points');
+  });
+});
+
+describe('serverHttpUrl', () => {
+  it('turns the WebSocket URL into the HTTP base', () => {
+    expect(serverHttpUrl('/stats', 'ws://localhost:8787/ws')).toBe('http://localhost:8787/stats');
+    expect(serverHttpUrl('/pool', 'wss://game.example/ws')).toBe('https://game.example/pool');
   });
 });

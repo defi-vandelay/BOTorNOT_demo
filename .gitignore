@@ -10,6 +10,8 @@ coverage/
 !.env.example
 *.db
 *.db-journal
+*.db-wal
+*.db-shm
 *.sqlite
 # foundry
 packages/contracts/out/

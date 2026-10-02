@@ -1,53 +1,20 @@
 import type { ServerMessage } from '@botornot/shared';
-import type { ChatTurn, LlmGateway } from '../llm/gateway';
+import type { LlmGateway } from '../llm/gateway';
 import type { Round, Seat } from '../game/round';
-import { deflection } from './deflections';
+import { contextNote } from './context';
+import { SUPPORT_MESSAGE } from './deflections';
 import { humanizeText, typingPlan } from './humanizer';
-import { systemPrompt, type Persona } from './personas';
+import type { Line } from './messages';
+import type { Persona } from './personas';
+import { nextBotAction } from './policy';
 
-export interface Line {
-  from: 'you' | 'partner';
-  text: string;
-}
+export { buildMessages, type Line } from './messages';
+export { localTimeNote } from './context';
 
 /** How often a "typing…" ping is repeated while the bot is typing (clients hide it after ~3 s). */
 const TYPING_PING_MS = 2_000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** Local time for the persona, so "what time is it there?" isn't a giveaway. */
-export function localTimeNote(persona: Persona, now = new Date()): string {
-  const when = now.toLocaleString('en-GB', {
-    timeZone: persona.timezone,
-    weekday: 'long',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
-  return `(it's ${when} where you are)`;
-}
-
-/**
- * Turns the chat so far into Messages API turns: the partner is "user", the bot is "assistant".
- * Consecutive lines from one side are merged, and the list always starts and ends with a user turn.
- */
-export function buildMessages(lines: Line[], note: string): ChatTurn[] {
-  const turns: ChatTurn[] = [];
-  for (const line of lines) {
-    const role = line.from === 'you' ? 'assistant' : 'user';
-    const last = turns.at(-1);
-    if (last?.role === role) last.content += `\n${line.text}`;
-    else turns.push({ role, content: line.text });
-  }
-  if (turns[0]?.role !== 'user') {
-    const opener = turns.length ? '(chat started, you went first)' : '(chat started, you go first)';
-    turns.unshift({ role: 'user', content: opener });
-  }
-  if (turns.at(-1)?.role !== 'user')
-    turns.push({ role: 'user', content: "(they haven't replied)" });
-  turns[0]!.content = `${note}\n${turns[0]!.content}`;
-  return turns;
-}
 
 /** A house bot sitting in one seat of a round. It sees only what a human in that seat would. */
 export class BotSeat implements Seat {
@@ -62,6 +29,7 @@ export class BotSeat implements Seat {
     readonly persona: Persona,
     private readonly llm: LlmGateway,
     private readonly log: (msg: string) => void = console.error,
+    private readonly headlines: () => string[] = () => [],
   ) {}
 
   attach(round: Round, seat: 0 | 1): void {
@@ -88,19 +56,24 @@ export class BotSeat implements Seat {
 
   private async takeTurn(token: number): Promise<void> {
     const started = Date.now();
-    let reply: string | null = null;
-    try {
-      reply = await this.llm.reply({
-        system: systemPrompt(this.persona),
-        messages: buildMessages(this.lines, localTimeNote(this.persona)),
-        maxTokens: 1024,
-      });
-    } catch (err) {
-      this.log(`bot ${this.persona.id}: LLM error: ${(err as Error).message}`);
-    }
+    const action = await nextBotAction({
+      persona: this.persona,
+      lines: this.lines,
+      note: contextNote(this.persona, this.headlines()),
+      llm: this.llm,
+    });
     if (token !== this.turnToken) return;
 
-    const text = humanizeText(reply ?? deflection(), this.persona);
+    if (action.kind === 'break-glass') {
+      this.log(`bot ${this.persona.id}: break-glass (${action.category}), round voided`);
+      this.round?.void(SUPPORT_MESSAGE);
+      return;
+    }
+    if (action.source === 'deflection') {
+      this.log(`bot ${this.persona.id}: deflected (${action.reason})`);
+    }
+
+    const text = humanizeText(action.text, this.persona);
     const plan = typingPlan(text, Date.now() - started);
 
     await sleep(plan.readMs);

@@ -9,7 +9,7 @@ This repo is the **testnet demo**. It is built in milestones (see [`docs/technic
 | Milestone                 | What it adds                                                                  | Status |
 | ------------------------- | ----------------------------------------------------------------------------- | ------ |
 | M0 Skeleton               | Monorepo, shared game rules, server and web app shells, contracts project, CI | ✅     |
-| M1 Playable off-chain     | Matchmaking, chat rounds, a first bot, result screen with fairness check      |        |
+| M1 Playable off-chain     | Matchmaking, chat rounds, a first bot, result screen with fairness check      | ✅     |
 | M2 Bot quality and safety | Personas, human-like typing, moderation, stats                                |        |
 | M3 On-chain               | Base Sepolia contracts, wallet sign-in, settlement                            |        |
 | M4 Hosted                 | Deployed web app and server                                                   |        |
@@ -45,7 +45,16 @@ Without an `ANTHROPIC_API_KEY` the server uses a mock bot with canned replies, s
 
 **Points and payout pools:** every call stakes 100 points (new players start with 1,000). Calls settle together when the payout pool closes (every 10 minutes; set `EPOCH_MS=60000` to watch it faster): wrong calls forfeit their stake, 5% is the fee, 25% goes to a human partner who fooled the caller, and the rest is split between right calls. The rules are in `packages/shared/src/settlement.ts`; http://localhost:8787/pool shows the current pool and the daily pool.
 
-**Stats:** http://localhost:8787/stats shows rounds played, the human/bot split and how often the bot fooled people (in memory until M2 adds a database).
+**Bots:** 20 personas (three of them "tricksters" who joke about being bots, like the human tricksters do), each aware of their local time and a few of today's headlines. Every bot turn goes through a policy layer: the partner's message and the bot's reply are both screened by `MODERATION_MODEL`; anything flagged gets a natural brush-off instead, and a message suggesting the player may be at risk ends the round with a support message (and a refund).
+
+**Safety and AI-judge checks** (need `ANTHROPIC_API_KEY`):
+
+- `pnpm --filter @botornot/server red-team` sends the prompts in `apps/server/src/bots/redteam.ts` (jailbreaks, offensive asks, personal data, crisis messages, classic bot tests) through the bot pipeline and marks anything to check by hand.
+- `pnpm --filter @botornot/server judge-experiment --judges 5 --rounds 4` has AI judges (`JUDGE_MODEL`) play the house bots and reports how often they spot them. Takes about 10 minutes.
+
+**Stats:** http://localhost:3000/stats shows rounds played, the human/bot split, how often bots and humans fooled people, the fool rate of each bot persona and the payout pools. The raw numbers are at http://localhost:8787/stats and http://localhost:8787/pool.
+
+**Saved data:** points, payout pools and stats are kept in `apps/server/data/botornot.db` (SQLite, built into Node 22.13+, so nothing to install), so they survive a restart. Delete the file to start fresh. Node prints a one-line "SQLite is an experimental feature" warning at startup; that's expected.
 
 `.env` files are git-ignored. **Never commit keys**: this repository is public.
 

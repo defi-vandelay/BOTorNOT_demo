@@ -36,6 +36,10 @@ export interface LlmGateway {
 
 export function createGateway(config: Config): LlmGateway {
   return config.LLM_PROVIDER === 'anthropic'
-    ? new AnthropicGateway({ apiKey: config.ANTHROPIC_API_KEY!, model: config.BOT_MODEL })
+    ? new AnthropicGateway({
+        apiKey: config.ANTHROPIC_API_KEY!,
+        model: config.BOT_MODEL,
+        classifyModel: config.MODERATION_MODEL,
+      })
     : new MockGateway();
 }

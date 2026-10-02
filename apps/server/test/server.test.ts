@@ -13,7 +13,10 @@ afterEach(async () => {
 });
 
 function start() {
-  server = startServer({ ...loadConfig({}), PORT: 0 }, { llm: new MockGateway(), log: () => {} });
+  server = startServer(
+    { ...loadConfig({ HEADLINES_RSS_URL: 'off', DB_PATH: ':memory:' }), PORT: 0 },
+    { llm: new MockGateway(), log: () => {} },
+  );
   return new Promise<number>((resolve) =>
     server!.http.once('listening', () => resolve((server!.http.address() as AddressInfo).port)),
   );

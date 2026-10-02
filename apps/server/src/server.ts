@@ -8,6 +8,8 @@ import { Ledger } from './game/ledger';
 import { Matchmaker, type Player } from './game/matchmaker';
 import { Stats } from './game/stats';
 import { operatorAccount } from './operator';
+import { Headlines } from './bots/context';
+import { Store } from './store';
 
 export interface GameServer {
   http: Server;
@@ -33,10 +35,12 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
   const log = deps.log ?? console.log;
   const operator = operatorAccount(config.OPERATOR_PRIVATE_KEY);
   const commit = new CommitService(operator, config.CHAIN_ID, config.GAME_VAULT_ADDRESS);
-  const stats = new Stats();
+  const store = new Store(config.DB_PATH);
+  const stats = new Stats(store);
   const players = new Set<Player>();
   const ledger = new Ledger({
     epochMs: config.EPOCH_MS,
+    store,
     refillWhenBroke: config.DEV_MODE,
     onSettled: (epoch, settlement) => {
       if (settlement.rightCalls + settlement.wrongCalls === 0) return;
@@ -62,9 +66,14 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
     },
   });
   ledger.start();
+  const headlines = new Headlines(
+    config.HEADLINES_RSS_URL === 'off' ? null : config.HEADLINES_RSS_URL,
+    log,
+  );
   const matchmaker = new Matchmaker({
     commit,
     llm: deps.llm,
+    headlines: () => headlines.current(),
     stats,
     ledger,
     botShare: config.BOT_SHARE,
@@ -176,7 +185,12 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
         matchmaker.stop();
         ledger.stop();
         for (const client of wss.clients) client.terminate();
-        wss.close(() => http.close(() => resolve()));
+        wss.close(() =>
+          http.close(() => {
+            store.close();
+            resolve();
+          }),
+        );
       }),
   };
 }

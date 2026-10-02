@@ -6,12 +6,15 @@ import {
   type EpochSettlement,
   type SettlementRules,
 } from '@botornot/shared';
+import type { Store } from '../store';
 
 export interface LedgerDeps {
   epochMs: number;
   rules?: SettlementRules;
   /** Dev mode: a player who runs out of points is topped back up, so testing never stalls. */
   refillWhenBroke?: boolean;
+  /** Persists balances and pools across restarts; without one everything lives in memory. */
+  store?: Store;
   /** Called after each epoch closes, with the epoch number and its settlement. */
   onSettled?: (epoch: number, settlement: EpochSettlement) => void;
 }
@@ -34,6 +37,14 @@ export class Ledger {
 
   constructor(private readonly deps: LedgerDeps) {
     this.rules = deps.rules ?? DEFAULT_RULES;
+    const store = deps.store;
+    if (store) {
+      this.calls = store.pendingCalls();
+      this.epoch = store.meta('epoch') ?? 1;
+      this.dailyPool = store.meta('dailyPool') ?? 0;
+      this.feesCollected = store.meta('feesCollected') ?? 0;
+      this.lastSettlement = store.lastEpoch();
+    }
   }
 
   start(now = Date.now()): void {
@@ -47,9 +58,11 @@ export class Ledger {
 
   balance(player: string): number {
     const key = player.toLowerCase();
-    let points = this.balances.get(key) ?? STARTING_POINTS;
-    if (points < this.rules.stake && this.deps.refillWhenBroke) points = STARTING_POINTS;
-    this.balances.set(key, points);
+    const points = this.get(key);
+    if (points < this.rules.stake && this.deps.refillWhenBroke) {
+      this.set(key, STARTING_POINTS);
+      return STARTING_POINTS;
+    }
     return points;
   }
 
@@ -70,7 +83,9 @@ export class Ledger {
 
   /** A staked call made this epoch; it settles when the epoch closes. */
   record(call: EpochCall): void {
-    this.calls.push({ ...call, player: call.player.toLowerCase() });
+    const stored = { ...call, player: call.player.toLowerCase() };
+    this.calls.push(stored);
+    this.deps.store?.addPendingCall(stored);
   }
 
   get pendingCalls(): number {
@@ -79,11 +94,21 @@ export class Ledger {
 
   closeEpoch(now = Date.now()): EpochSettlement {
     const settlement = settleEpoch(this.calls, this.rules);
-    for (const [player, s] of Object.entries(settlement.players)) this.add(player, s.credited);
+    for (const [player, s] of Object.entries(settlement.players)) {
+      this.balances.set(player, this.get(player) + s.credited);
+    }
     this.dailyPool += settlement.toDailyPool;
     this.feesCollected += settlement.fee;
     const epoch = this.epoch;
-    this.lastSettlement = { epoch, settlement };
+    const store = this.deps.store;
+    if (store && settlement.rightCalls + settlement.wrongCalls > 0) {
+      store.closeEpoch(epoch, settlement, this.balances);
+    }
+    store?.setMeta('epoch', epoch + 1);
+    store?.setMeta('dailyPool', this.dailyPool);
+    store?.setMeta('feesCollected', this.feesCollected);
+    if (settlement.rightCalls + settlement.wrongCalls > 0)
+      this.lastSettlement = { epoch, settlement };
     this.calls = [];
     this.epoch++;
     this.epochEndsAt = now + this.deps.epochMs;
@@ -91,9 +116,23 @@ export class Ledger {
     return settlement;
   }
 
+  private get(key: string): number {
+    let points = this.balances.get(key);
+    if (points === undefined) {
+      points = this.deps.store?.points(key) ?? STARTING_POINTS;
+      this.balances.set(key, points);
+    }
+    return points;
+  }
+
+  private set(key: string, points: number): void {
+    this.balances.set(key, points);
+    this.deps.store?.setPoints(key, points);
+  }
+
   private add(player: string, points: number): void {
     const key = player.toLowerCase();
-    this.balances.set(key, (this.balances.get(key) ?? STARTING_POINTS) + points);
+    this.set(key, this.get(key) + points);
   }
 
   toJSON() {
