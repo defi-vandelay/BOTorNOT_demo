@@ -11,7 +11,7 @@ This repo is the **testnet demo**. It is built in milestones (see [`docs/technic
 | M0 Skeleton               | Monorepo, shared game rules, server and web app shells, contracts project, CI | ✅     |
 | M1 Playable off-chain     | Matchmaking, chat rounds, a first bot, result screen with fairness check      | ✅     |
 | M2 Bot quality and safety | Personas, human-like typing, moderation, stats                                | ✅     |
-| M3 On-chain               | Base Sepolia contracts, wallet sign-in, settlement                            |        |
+| M3 On-chain               | Base Sepolia contracts, wallet sign-in, settlement                            | ✅     |
 | M4 Hosted                 | Deployed web app and server                                                   |        |
 
 ## Layout
@@ -65,6 +65,17 @@ Without an `ANTHROPIC_API_KEY` the server uses a mock bot with canned replies, s
 Players' wallets only ever sign messages; the server sends the transactions. (Coinbase's wallet signs for Base Sepolia but won't send transactions there.) In the lobby, a signed-in player taps **Get 1,000 free tBON and start playing** and signs the vault's session message: the server claims the faucet straight into the game for them and starts a 7-day session that lets it stake for them. A passkey wallet that has never sent a transaction is deployed by the server on first use (ERC-6492). **Withdraw all** works the same way. After each round the server settles the call on-chain (the contract recomputes the commitment from the reveal and moves the stake), and when the pool closes it pays out right callers. Results link to the transactions on Basescan. The payout rules are the same as for points, now in `GameVault.sol`.
 
 `.env` files are git-ignored. **Never commit keys**: this repository is public.
+
+## Hosting
+
+The web app goes on Vercel and the game server on Railway (any Docker host works):
+
+- **Server:** `railway.json` builds `apps/server/Dockerfile` from the repo root and checks `/health`. Mount a volume at `/data` so the SQLite database survives redeploys (the image sets `DB_PATH=/data/botornot.db`). Set the variables from `apps/server/.env.example`, at least `WEB_ORIGIN` (the web app's address), `ANTHROPIC_API_KEY`, `OPERATOR_PRIVATE_KEY`, `GAME_VAULT_ADDRESS` and `INVITE_CODE`. The image runs with `NODE_ENV=production`, so dev mode is off.
+- **Web:** a Vercel project with root directory `apps/web` and `NEXT_PUBLIC_SERVER_WS_URL=wss://<server address>/ws`.
+
+**Invite-only:** with `INVITE_CODE` set, only players who opened `https://<web address>/?invite=<code>` can play (the browser remembers the code). Others see an invite-only page.
+
+**Daily limits** (off in dev mode, reset at midnight UTC, `0` turns one off): `ROUNDS_PER_PLAYER_PER_DAY` (default 40, counted per wallet or guest and per IP), `BOT_ROUNDS_PER_DAY` across everyone (default 400; when it's used up nobody can queue, so a partner can't be inferred to be human) and `WALLET_ACTIONS_PER_DAY` per wallet (default 10, since the operator pays their gas). The server logs a warning when the operator's ETH falls below `OPERATOR_LOW_ETH`, and `/health` shows its balance.
 
 ## Checks
 

@@ -37,6 +37,15 @@ describe('game reducer', () => {
     expect(state.lines).toEqual([{ from: 'partner', text: 'yo', at: 6 }]);
   });
 
+  it('remembers that the server wants an invite', () => {
+    const state = play(
+      { type: 'connected', connected: true },
+      { type: 'server', now: 0, msg: { type: 'invite.required' } },
+      { type: 'connected', connected: false },
+    );
+    expect(state.inviteRequired).toBe(true);
+  });
+
   it('keeps the connection details when going back to the lobby', () => {
     const welcome = {
       type: 'welcome',

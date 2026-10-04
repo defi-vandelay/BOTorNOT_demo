@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { parseServerMessage, type Call, type ClientMessage } from '@botornot/shared';
 import type { Address } from 'viem';
 import { guestAccount } from './guest';
+import { inviteCode } from './invite';
 import { initialState, reduce } from './game';
 import { savedSignIn, signIn, signOut, type WalletSignIn } from './wallet';
 
@@ -17,11 +18,14 @@ export function useGame() {
   const lastTypingRef = useRef(0);
   // The signed top-up or withdrawal waiting for the server's wallet.result.
   const pendingRef = useRef<{ resolve: () => void; reject: (err: Error) => void } | null>(null);
+  // Turned away for want of an invite: retrying won't help until the page is reopened with one.
+  const deniedRef = useRef(false);
   // Created after mount: keys live in browser storage, which doesn't exist during server render.
   // A wallet sign-in (on-chain mode) takes over from the per-tab guest key.
   const [guest, setGuest] = useState<ReturnType<typeof guestAccount> | null>(null);
   const [wallet, setWallet] = useState<WalletSignIn | null>(null);
   useEffect(() => {
+    inviteCode(); // picks up ?invite= from an invite link
     setGuest(guestAccount());
     setWallet(savedSignIn());
   }, []);
@@ -30,6 +34,7 @@ export function useGame() {
   useEffect(() => {
     if (!address) return;
     dispatch({ type: 'identity' });
+    deniedRef.current = false;
     let closed = false;
     let retry: ReturnType<typeof setTimeout>;
 
@@ -41,11 +46,12 @@ export function useGame() {
         const auth = wallet
           ? { issuedAt: wallet.issuedAt, signature: wallet.signature }
           : undefined;
-        ws.send(JSON.stringify({ type: 'hello', address, auth }));
+        ws.send(JSON.stringify({ type: 'hello', address, auth, invite: inviteCode() }));
       };
       ws.onmessage = (event) => {
         const msg = parseServerMessage(String(event.data));
         if (!msg) return;
+        if (msg.type === 'invite.required') deniedRef.current = true;
         if (msg.type === 'wallet.result') {
           const pending = pendingRef.current;
           pendingRef.current = null;
@@ -58,7 +64,7 @@ export function useGame() {
         pendingRef.current?.reject(new Error('lost the connection to the game, try again'));
         pendingRef.current = null;
         dispatch({ type: 'connected', connected: false });
-        if (!closed) retry = setTimeout(connect, 2_000);
+        if (!closed && !deniedRef.current) retry = setTimeout(connect, 2_000);
       };
     };
     connect();

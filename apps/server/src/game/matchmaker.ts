@@ -47,6 +47,8 @@ export interface MatchmakerDeps {
   headlines?: () => string[];
   /** Allow two players from the same IP to match (two windows on one machine). */
   allowSameIp: boolean;
+  /** A round is starting with these humans in it (for daily limits). */
+  onRoundStart?: (players: Player[], bot: boolean) => void;
   log?: (msg: string) => void;
   rng?: () => number;
 }
@@ -173,6 +175,7 @@ export class Matchmaker {
     });
     a.current = { round, seat: 0 };
     b.current = { round, seat: 1 };
+    this.deps.onRoundStart?.([a, b], false);
     this.log(`round ${roundId.slice(0, 10)}: ${a.id} vs ${b.id}`);
     round.start();
   }
@@ -210,6 +213,7 @@ export class Matchmaker {
     });
     bot.attach(round, botSeat);
     player.current = { round, seat: humanSeat };
+    this.deps.onRoundStart?.([player], true);
     this.log(`round ${roundId.slice(0, 10)}: ${player.id} vs bot ${persona.id}`);
     round.start();
   }

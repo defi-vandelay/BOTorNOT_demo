@@ -33,6 +33,7 @@ function player(n: number, ip = `10.0.0.${n}`): Player & { seat: RecordingSeat }
 function matchmaker(botShare: number, allowSameIp = false) {
   const stats = new Stats();
   const ledger = new Ledger({ epochMs: 600_000 });
+  const started: { ids: string[]; bot: boolean }[] = [];
   const mm = new Matchmaker({
     commit,
     llm: new MockGateway(),
@@ -40,15 +41,28 @@ function matchmaker(botShare: number, allowSameIp = false) {
     ledger,
     botShare,
     allowSameIp,
+    onRoundStart: (players, bot) => started.push({ ids: players.map((p) => p.id), bot }),
     log: () => {},
   });
-  return { mm, stats, ledger };
+  return { mm, stats, ledger, started };
 }
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
 describe('Matchmaker', () => {
+  it('reports each round as it starts, for the daily limits', async () => {
+    const { mm, started } = matchmaker(1);
+    mm.join(player(1));
+    await mm.tick(Date.now() + QUEUE_WAIT_MAX_MS);
+    const human = matchmaker(0);
+    human.mm.join(player(2));
+    human.mm.join(player(3));
+    await human.mm.tick(Date.now() + QUEUE_WAIT_MAX_MS);
+    expect(started).toEqual([{ ids: ['p1'], bot: true }]);
+    expect(human.started).toEqual([{ ids: ['p2', 'p3'], bot: false }]);
+  });
+
   it('never matches before the random wait is over', async () => {
     const { mm } = matchmaker(1);
     const p = player(1);
