@@ -84,6 +84,15 @@ async function main() {
   });
   const vault = (await publicClient.waitForTransactionReceipt({ hash: vaultTx })).contractAddress!;
 
+  console.log('Letting the vault top players up from the faucet…');
+  const setVaultTx = await wallet.writeContract({
+    address: token,
+    abi: GameToken.abi,
+    functionName: 'setVault',
+    args: [vault],
+  });
+  await publicClient.waitForTransactionReceipt({ hash: setVaultTx });
+
   writeEnv('GAME_VAULT_ADDRESS', vault);
   const scan = 'https://sepolia.basescan.org/address';
   console.log(`
@@ -94,13 +103,8 @@ Done. GAME_VAULT_ADDRESS has been saved to apps/server/.env.
   GameVault  ${vault}
              ${scan}/${vault}
 
-Last step: in the Coinbase portal, open Onchain Tools > Paymaster > Configuration (Base Sepolia)
-and add both addresses to the contract allowlist, so players' gas is sponsored:
-
-  ${token}   functions: faucet, approve
-  ${vault}   functions: deposit, withdraw, startSession, endSession
-
-Then restart the game (pnpm dev).`);
+Players only sign messages; the game server sends their transactions and pays the gas, so keep
+some test ETH in the operator wallet. Now restart the game (pnpm dev).`);
 }
 
 main().catch((err: unknown) => fail(err instanceof Error ? err.message : String(err)));

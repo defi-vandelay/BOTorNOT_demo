@@ -10,8 +10,9 @@ const SESSION_MARGIN_MS = 5 * 60_000;
 const TICK_MS = 5_000;
 
 /** viem errors carry a one-line summary; the full text is pages long. */
-function brief(err: unknown): string {
-  return (err as { shortMessage?: string }).shortMessage ?? String(err);
+export function brief(err: unknown): string {
+  const short = (err as { shortMessage?: string }).shortMessage;
+  return short ?? (err instanceof Error ? err.message : String(err));
 }
 
 /** Whole tokens, rounded to 2 decimals, for display. */
@@ -85,7 +86,7 @@ export class OnchainBank implements Bank {
     if ((this.sessions.get(key) ?? 0) < Date.now() + SESSION_MARGIN_MS) {
       return 'start a session to play for tokens';
     }
-    if (this.balance(player) < STAKE_POINTS) return 'not enough tBON in the game: deposit some';
+    if (this.balance(player) < STAKE_POINTS) return 'not enough tBON in the game: top up first';
     return null;
   }
 

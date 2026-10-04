@@ -22,11 +22,6 @@ const schema = z.object({
   /** Base Sepolia. Set GAME_VAULT_ADDRESS (pnpm deploy:testnet does it) to play on-chain. */
   CHAIN_ID: z.coerce.number().int().default(84532),
   RPC_URL: z.string().url().default('https://sepolia.base.org'),
-  /**
-   * Coinbase paymaster (Base Sepolia). Handed to players' wallets, which call it from Coinbase's
-   * side, so it must be the real public URL. Its contract allowlist limits what it sponsors.
-   */
-  PAYMASTER_URL: z.string().url().optional(),
   GAME_VAULT_ADDRESS: z
     .string()
     .regex(/^0x[0-9a-fA-F]{40}$/)

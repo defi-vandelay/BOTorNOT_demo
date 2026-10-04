@@ -7,6 +7,8 @@ const hexOf = (pattern: RegExp) =>
 const hex = hexOf(/^0x[0-9a-fA-F]*$/);
 const address = hexOf(/^0x[0-9a-fA-F]{40}$/);
 const bytes32 = hexOf(/^0x[0-9a-fA-F]{64}$/);
+/** A wallet signature: 65 bytes from a key, longer (but bounded) from a smart wallet. */
+const signature = hexOf(/^0x[0-9a-fA-F]{2,20000}$/);
 
 // ---------- client -> server ----------
 
@@ -17,8 +19,18 @@ export const clientMessage = z.discriminatedUnion('type', [
     /** Wallet players (on-chain mode): a signature over signInMessage(), proving the address. */
     auth: z.object({ issuedAt: z.number().int(), signature: hex }).optional(),
   }),
-  /** A wallet player deposited, withdrew or started a session: re-read their on-chain state. */
-  z.object({ type: z.literal('wallet.refresh') }),
+  /**
+   * A wallet player tops up without sending a transaction: the server claims the test-token
+   * faucet into the game for them and/or starts the session they signed (GameVault.sessionMessage),
+   * paying the gas. Answered with wallet.result.
+   */
+  z.object({
+    type: z.literal('wallet.topUp'),
+    faucet: z.boolean(),
+    session: z.object({ days: z.number().int().min(1).max(30), signature }).optional(),
+  }),
+  /** Withdraw the whole balance to the wallet, signed (GameVault.withdrawAllMessage). */
+  z.object({ type: z.literal('wallet.withdraw'), signature }),
   z.object({ type: z.literal('queue.join') }),
   z.object({ type: z.literal('queue.leave') }),
   z.object({ type: z.literal('chat.typing') }),
@@ -58,10 +70,6 @@ export const serverMessage = z.discriminatedUnion('type', [
         vault: address,
         token: address,
         explorer: z.string(),
-        /** Where the wallet asks for gas sponsorship (the Coinbase paymaster), if any. */
-        paymasterUrl: z.string().optional(),
-        /** Why that paymaster won't work (e.g. it's for the wrong network), if the server can tell. */
-        paymasterIssue: z.string().optional(),
       })
       .optional(),
   }),
@@ -123,6 +131,14 @@ export const serverMessage = z.discriminatedUnion('type', [
   /** On-chain: the transaction that settled this player's call. */
   z.object({ type: z.literal('round.settled'), roundId: bytes32, txHash: hex }),
   z.object({ type: z.literal('round.void'), reason: z.string() }),
+  z.object({
+    type: z.literal('wallet.result'),
+    action: z.enum(['topUp', 'withdraw']),
+    ok: z.boolean(),
+    /** Why it failed. */
+    message: z.string().optional(),
+    txHash: hex.optional(),
+  }),
   z.object({ type: z.literal('error'), message: z.string() }),
 ]);
 export type ServerMessage = z.infer<typeof serverMessage>;

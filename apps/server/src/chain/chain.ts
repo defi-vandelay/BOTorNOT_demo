@@ -1,8 +1,13 @@
 import {
+  BaseError,
+  ContractFunctionRevertedError,
   createPublicClient,
   createWalletClient,
+  decodeErrorResult,
   decodeEventLog,
   http,
+  isErc6492Signature,
+  parseErc6492Signature,
   type Address,
   type Chain as ViemChain,
   type Hex,
@@ -12,7 +17,7 @@ import {
   type WalletClient,
 } from 'viem';
 import { baseSepolia } from 'viem/chains';
-import { gameVaultAbi } from '@botornot/shared';
+import { gameTokenAbi, gameVaultAbi } from '@botornot/shared';
 
 /** One judge's reveal and call, as GameVault.settleRound takes it. */
 export interface ChainJudge {
@@ -152,6 +157,7 @@ export class Chain {
     return { right, wrong, deception };
   }
 
+  /** Checks a personal-message signature, from an EOA or a smart wallet (deployed or not). */
   async verifySignIn(address: Address, message: string, signature: Hex): Promise<boolean> {
     try {
       // Handles smart wallets too, deployed (ERC-1271) or not yet (ERC-6492).
@@ -195,6 +201,111 @@ export class Chain {
     });
   }
 
+  // ---------- players' signed actions, relayed by the operator (who pays the gas) ----------
+
+  /** Tops the player up from the test token's faucet, straight into the vault. */
+  async claimFaucetFor(player: Address): Promise<Hex> {
+    return this.send(async () => {
+      try {
+        return this.confirm(
+          await this.wallet.writeContract({
+            address: this.vault,
+            abi: gameVaultAbi,
+            functionName: 'claimFaucetFor',
+            args: [player],
+          }),
+        );
+      } catch (err) {
+        throw faucetCooldown(err) ? new Error('the free tBON faucet only opens once a day') : err;
+      }
+    });
+  }
+
+  /** Starts a session the player signed for (GameVault.sessionMessage with their next nonce). */
+  async startSessionFor(player: Address, days: number, signature: Hex): Promise<Hex> {
+    return this.send(async () => {
+      const nonce = await this.nonce(player);
+      const message = await this.public.readContract({
+        address: this.vault,
+        abi: gameVaultAbi,
+        functionName: 'sessionMessage',
+        args: [BigInt(days), nonce],
+      });
+      const sig = await this.signedBy(player, message, signature);
+      return this.confirm(
+        await this.wallet.writeContract({
+          address: this.vault,
+          abi: gameVaultAbi,
+          functionName: 'startSessionFor',
+          args: [player, BigInt(days), sig],
+        }),
+      );
+    });
+  }
+
+  /** Sends the player their whole balance; they signed GameVault.withdrawAllMessage. */
+  async withdrawAllFor(player: Address, signature: Hex): Promise<Hex> {
+    return this.send(async () => {
+      const nonce = await this.nonce(player);
+      const message = await this.public.readContract({
+        address: this.vault,
+        abi: gameVaultAbi,
+        functionName: 'withdrawAllMessage',
+        args: [nonce],
+      });
+      const sig = await this.signedBy(player, message, signature);
+      return this.confirm(
+        await this.wallet.writeContract({
+          address: this.vault,
+          abi: gameVaultAbi,
+          functionName: 'withdrawAllFor',
+          args: [player, sig],
+        }),
+      );
+    });
+  }
+
+  private nonce(player: Address): Promise<bigint> {
+    return this.public.readContract({
+      address: this.vault,
+      abi: gameVaultAbi,
+      functionName: 'nonces',
+      args: [player],
+    });
+  }
+
+  /**
+   * Checks the signature off-chain first (no gas wasted on a bad one) and returns what the
+   * contract can verify. A passkey wallet that has never sent a transaction isn't deployed yet,
+   * and wraps its signature with how to deploy it (ERC-6492): the operator deploys it, which is
+   * what the wallet would do on its first transaction anyway.
+   */
+  private async signedBy(player: Address, message: string, signature: Hex): Promise<Hex> {
+    if (!(await this.verifySignIn(player, message, signature))) {
+      throw new Error("that signature isn't valid for this request, please sign again");
+    }
+    if (!isErc6492Signature(signature)) return signature;
+    const { address: factory, data, signature: inner } = parseErc6492Signature(signature);
+    if (!factory || !data || (await this.public.getCode({ address: player }))) return inner;
+    // The verification above only passes if this call deploys the player's wallet. Never let it
+    // reach our own contracts, where the operator is privileged.
+    if ([this.vault, this.token].some((a) => a.toLowerCase() === factory.toLowerCase())) {
+      throw new Error('unexpected wallet factory');
+    }
+    const hash = await this.wallet.sendTransaction({ to: factory, data });
+    const receipt = await this.public.waitForTransactionReceipt({ hash });
+    if (receipt.status !== 'success' || !(await this.public.getCode({ address: player }))) {
+      throw new Error(`could not deploy the wallet (${hash})`);
+    }
+    return inner;
+  }
+
+  private async confirm(hash: Hex): Promise<Hex> {
+    const receipt = await this.public.waitForTransactionReceipt({ hash });
+    if (receipt.status !== 'success') throw new Error(`transaction reverted (${hash})`);
+    return hash;
+  }
+
   /** Closes the epoch if nobody has yet, then pays its right callers. */
   async closeAndClaim(epoch: number, players: Address[]): Promise<Hex> {
     return this.send(async () => {
@@ -224,5 +335,18 @@ export class Chain {
     const next = this.queue.then(fn, fn);
     this.queue = next.catch(() => undefined);
     return next;
+  }
+}
+
+/** The vault's faucet call reverted with the token's FaucetCooldown error. */
+function faucetCooldown(err: unknown): boolean {
+  if (!(err instanceof BaseError)) return false;
+  const reverted = err.walk((e) => e instanceof ContractFunctionRevertedError);
+  const data = (reverted as ContractFunctionRevertedError | null)?.raw;
+  if (!data) return false;
+  try {
+    return decodeErrorResult({ abi: gameTokenAbi, data }).errorName === 'FaucetCooldown';
+  } catch {
+    return false;
   }
 }

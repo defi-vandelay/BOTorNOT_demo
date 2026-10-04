@@ -6,7 +6,15 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import {Commitment} from "./Commitment.sol";
+
+/// @notice The test token's faucet (GameToken.faucetFor).
+interface IFaucet {
+    function faucetFor(address account) external returns (uint256);
+}
 
 /// @title GameVault
 /// @notice Holds players' tokens for BOT or NOT and settles rounds into payout pools (plan doc 06 v2).
@@ -15,6 +23,10 @@ import {Commitment} from "./Commitment.sol";
 ///         nothing round-specific touches the chain before a chat ends. After each round the
 ///         operator reveals the answer: the contract recomputes the commitment the player was given
 ///         before the chat, decides whether the call was right, and moves the stake.
+///
+///         A player whose wallet only signs needs no transaction of their own: they sign a message
+///         and anyone (the game server) relays it and pays the gas (startSessionFor,
+///         withdrawAllFor, and on testnet claimFaucetFor).
 ///
 ///         Every staked call in an epoch settles in one pool, the same way whether the partner was a
 ///         human or a bot. A wrong call forfeits the stake, split into a fee, a deception share
@@ -48,6 +60,8 @@ contract GameVault is Ownable, Pausable, ReentrancyGuard {
     mapping(address => uint256) public sessionExpiry;
     /// @notice keccak256(abi.encode(roundId, judge)) => settled, so a call can't be settled twice.
     mapping(bytes32 => bool) public settled;
+    /// @notice Each signed message carries the player's next nonce, so it can be used only once.
+    mapping(address => uint256) public nonces;
 
     struct Epoch {
         uint32 rightCalls;
@@ -108,6 +122,7 @@ contract GameVault is Ownable, Pausable, ReentrancyGuard {
     error EpochNotOver(uint256 epoch);
     error EpochAlreadyClosed(uint256 epoch);
     error EpochNotClosed(uint256 epoch);
+    error BadSignature();
 
     modifier onlyOperator() {
         if (msg.sender != operator) revert NotOperator();
@@ -166,6 +181,72 @@ contract GameVault is Ownable, Pausable, ReentrancyGuard {
     function endSession() external {
         sessionExpiry[msg.sender] = 0;
         emit SessionEnded(msg.sender);
+    }
+
+    // ---------- players, by signature (anyone relays and pays the gas) ----------
+
+    /// @notice Tops `player` up from the test token's faucet, straight into the game. Anyone can
+    ///         call it; the tokens only ever go to `player`, at most once a day.
+    function claimFaucetFor(address player) external whenNotPaused nonReentrant {
+        uint256 amount = IFaucet(address(token)).faucetFor(player);
+        balanceOf[player] += amount;
+        emit Deposited(player, amount);
+    }
+
+    /// @notice startSession for `player`, who signed sessionMessage(days_, nonces[player]).
+    function startSessionFor(address player, uint256 days_, bytes calldata signature) external {
+        if (days_ == 0 || days_ * 1 days > MAX_SESSION) revert BadSessionExpiry();
+        _useSignature(player, sessionMessage(days_, nonces[player]), signature);
+        uint256 expiry = block.timestamp + days_ * 1 days;
+        sessionExpiry[player] = expiry;
+        emit SessionStarted(player, expiry);
+    }
+
+    /// @notice Sends `player` their whole balance; they signed withdrawAllMessage(nonces[player]).
+    ///         Open while paused, like withdraw.
+    function withdrawAllFor(address player, bytes calldata signature) external nonReentrant {
+        _useSignature(player, withdrawAllMessage(nonces[player]), signature);
+        uint256 amount = balanceOf[player];
+        if (amount == 0) revert ZeroAmount();
+        balanceOf[player] = 0;
+        token.safeTransfer(player, amount);
+        emit Withdrawn(player, amount);
+    }
+
+    /// @notice What a player signs (as a personal message) to start a session of `days_` days.
+    function sessionMessage(uint256 days_, uint256 nonce) public view returns (string memory) {
+        return string.concat(
+            "BOT or NOT: start a ",
+            Strings.toString(days_),
+            "-day session.\n\nThe game may stake ",
+            Strings.toString(stake / 1e18),
+            " tBON on each call I make until it ends.\n\n",
+            _signedFooter(nonce)
+        );
+    }
+
+    /// @notice What a player signs to withdraw their whole balance to their wallet.
+    function withdrawAllMessage(uint256 nonce) public view returns (string memory) {
+        return string.concat("BOT or NOT: withdraw all my tBON to my wallet.\n\n", _signedFooter(nonce));
+    }
+
+    function _signedFooter(uint256 nonce) private view returns (string memory) {
+        return string.concat(
+            "Vault: ",
+            Strings.toChecksumHexString(address(this)),
+            "\nChain: ",
+            Strings.toString(block.chainid),
+            "\nNonce: ",
+            Strings.toString(nonce)
+        );
+    }
+
+    /// @dev Accepts an EOA signature or a deployed smart wallet's (ERC-1271). A wallet that isn't
+    ///      deployed yet (ERC-6492) has to be deployed first; the game server does that.
+    function _useSignature(address player, string memory message, bytes calldata signature) private {
+        bytes32 hash = MessageHashUtils.toEthSignedMessageHash(bytes(message));
+        if (!SignatureChecker.isValidSignatureNow(player, hash, signature)) revert BadSignature();
+        nonces[player]++;
     }
 
     // ---------- settlement ----------

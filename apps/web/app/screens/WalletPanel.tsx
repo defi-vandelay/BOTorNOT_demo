@@ -2,58 +2,60 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { Address } from 'viem';
-import { STAKE_POINTS } from '@botornot/shared';
+import { STAKE_POINTS, type ClientMessage } from '@botornot/shared';
 import type { GameState } from '@/lib/game';
 import {
   SESSION_DAYS,
   readBalances,
-  sendCalls,
-  topUpCalls,
+  signSession,
+  signWithdrawAll,
   wholeTokens,
-  withdrawCalls,
   type WalletBalances,
 } from '@/lib/wallet';
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
+type WalletRequest = Extract<ClientMessage, { type: 'wallet.topUp' | 'wallet.withdraw' }>;
+/** What's in progress, and whether it's waiting on the wallet or on the chain. */
+type Busy = { action: 'signIn' | 'topUp' | 'withdraw'; step: 'wallet' | 'chain' };
+
 /**
  * On-chain mode only. Guests can sign in with a Base Account to play for test tokens; signed-in
- * players see their balance and session and can top up or withdraw (gas is sponsored).
+ * players see their balance and session and can top up or withdraw. The wallet only signs: the
+ * game server sends the transactions and pays the gas.
  */
 export function WalletPanel({
   state,
   address,
   onSignIn,
   onSignOut,
-  onChanged,
+  onRequest,
 }: {
   state: GameState;
   address: Address | null;
   onSignIn: () => Promise<void>;
   onSignOut: () => void;
-  onChanged: () => void;
+  onRequest: (msg: WalletRequest) => Promise<void>;
 }) {
   const welcome = state.welcome;
   const onchain = welcome?.onchain;
-  const [busy, setBusy] = useState<string | null>(null);
+  const [busy, setBusy] = useState<Busy | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [balances, setBalances] = useState<WalletBalances | null>(null);
 
   const tokensMode = welcome?.mode === 'tokens';
   const reload = useCallback(() => {
     if (!onchain || !address || !tokensMode) return;
-    readBalances(onchain.token, address).then(setBalances, () => setBalances(null));
+    readBalances(onchain, address).then(setBalances, () => setBalances(null));
   }, [onchain, address, tokensMode]);
   useEffect(reload, [reload]);
 
   if (!welcome || !onchain) return null;
 
-  const run = async (label: string, fn: () => Promise<void>) => {
-    setBusy(label);
+  const run = async (fn: () => Promise<void>) => {
     setError(null);
     try {
       await fn();
-      onChanged();
       reload();
     } catch (err) {
       setError(friendly(err));
@@ -71,7 +73,10 @@ export function WalletPanel({
           passkey, so there's nothing to install, and the game pays your gas.
         </p>
         <button
-          onClick={() => void run('signing in', onSignIn)}
+          onClick={() => {
+            setBusy({ action: 'signIn', step: 'wallet' });
+            void run(onSignIn);
+          }}
           disabled={!!busy}
           className="mt-4 w-full rounded-xl border border-[var(--border)] px-4 py-3 font-semibold hover:bg-[var(--bubble-them)] disabled:opacity-40"
         >
@@ -88,28 +93,40 @@ export function WalletPanel({
   const sessionEndsAt = state.sessionEndsAt ?? 0;
   // The server wants at least a few minutes left on a session before it stakes a new round.
   const sessionOk = sessionEndsAt > Date.now() + 10 * 60_000;
-  const needsTokens = inGame < STAKE_POINTS;
-  // A paymaster for the wrong network fails every batch, so don't offer them until it's fixed.
-  const canSend = !onchain.paymasterIssue;
-  const canTopUp = canSend && ((faucetReady && needsTokens) || inWallet > 0 || !sessionOk);
+  const claimFaucet = faucetReady && inGame < STAKE_POINTS;
+  const canTopUp = !!balances && (claimFaucet || !sessionOk);
+
   const topUp = () =>
-    run('topping up', () =>
-      sendCalls(
-        address,
-        topUpCalls(onchain, {
-          claimFaucet: faucetReady && needsTokens,
-          walletTokens: balances?.wallet ?? 0n,
-          startSession: !sessionOk,
-        }),
-        onchain.paymasterUrl,
-      ),
-    );
-  const topUpLabel =
-    faucetReady && needsTokens
-      ? 'Get 1,000 free tBON and start playing'
-      : inWallet > 0
-        ? `Deposit ${inWallet.toLocaleString()} tBON${sessionOk ? '' : ' and start a session'}`
-        : `Start a ${SESSION_DAYS}-day session`;
+    run(async () => {
+      let session: { days: number; signature: `0x${string}` } | undefined;
+      if (!sessionOk) {
+        setBusy({ action: 'topUp', step: 'wallet' });
+        session = {
+          days: SESSION_DAYS,
+          signature: await signSession(onchain, address, SESSION_DAYS, balances!.nonce),
+        };
+      }
+      setBusy({ action: 'topUp', step: 'chain' });
+      await onRequest({ type: 'wallet.topUp', faucet: claimFaucet, session });
+    });
+  const withdraw = () =>
+    run(async () => {
+      setBusy({ action: 'withdraw', step: 'wallet' });
+      const signature = await signWithdrawAll(onchain, address, balances!.nonce);
+      setBusy({ action: 'withdraw', step: 'chain' });
+      await onRequest({ type: 'wallet.withdraw', signature });
+    });
+  const topUpLabel = claimFaucet
+    ? sessionOk
+      ? 'Get 1,000 free tBON'
+      : 'Get 1,000 free tBON and start playing'
+    : `Start a ${SESSION_DAYS}-day session`;
+  const label = (action: Busy['action'], idle: string) =>
+    busy?.action !== action
+      ? idle
+      : busy.step === 'wallet'
+        ? 'Sign in your wallet…'
+        : 'Sending to the chain…';
 
   return (
     <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 text-sm">
@@ -142,7 +159,7 @@ export function WalletPanel({
       </dl>
       {inWallet > 0 && (
         <p className="mt-1 text-xs text-[var(--muted)]">
-          {inWallet.toLocaleString()} tBON in your wallet, not deposited yet.
+          {inWallet.toLocaleString()} tBON withdrawn to your wallet.
         </p>
       )}
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
@@ -152,24 +169,20 @@ export function WalletPanel({
             disabled={!!busy}
             className="flex-1 rounded-xl bg-[var(--fg)] px-4 py-3 font-semibold text-[var(--bg)] hover:opacity-90 disabled:opacity-40"
           >
-            {busy === 'topping up' ? 'Confirm in your wallet…' : topUpLabel}
+            {label('topUp', topUpLabel)}
           </button>
         )}
-        {canSend && inGame > 0 && (
+        {inGame > 0 && balances && (
           <button
-            onClick={() =>
-              void run('withdrawing', () =>
-                sendCalls(address, withdrawCalls(onchain, inGame), onchain.paymasterUrl),
-              )
-            }
+            onClick={() => void withdraw()}
             disabled={!!busy}
             className="rounded-xl border border-[var(--border)] px-4 py-3 font-semibold hover:bg-[var(--bubble-them)] disabled:opacity-40"
           >
-            {busy === 'withdrawing' ? 'Confirm in your wallet…' : 'Withdraw all'}
+            {label('withdraw', 'Withdraw all')}
           </button>
         )}
       </div>
-      {needsTokens && !faucetReady && inWallet === 0 && balances && (
+      {inGame < STAKE_POINTS && !faucetReady && balances && (
         <p className="mt-2 text-xs text-[var(--muted)]">
           The free tBON faucet opens again{' '}
           {new Date(balances.faucetReadyAt).toLocaleString(undefined, {
@@ -181,19 +194,9 @@ export function WalletPanel({
         </p>
       )}
       {error && <p className="mt-2 text-[var(--bot)]">{error}</p>}
-      {!onchain.paymasterUrl ? (
-        <p className="mt-2 text-xs text-[var(--bot)]">
-          Gas sponsorship is off: set PAYMASTER_URL in apps/server/.env and restart the server.
-        </p>
-      ) : (
-        onchain.paymasterIssue && (
-          <p className="mt-2 text-xs text-[var(--bot)]">
-            {onchain.paymasterIssue} Then restart the server.
-          </p>
-        )
-      )}
       <p className="mt-3 text-xs text-[var(--muted)]">
-        Base Sepolia testnet. tBON is a test token with no value.
+        Base Sepolia testnet. tBON is a test token with no value. Your wallet only signs; the game
+        pays the gas.
       </p>
     </div>
   );
@@ -202,8 +205,5 @@ export function WalletPanel({
 function friendly(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
   if (/reject|denied|cancel/i.test(msg)) return 'Cancelled in the wallet.';
-  if (/chain.*not supported|unsupported chain/i.test(msg)) {
-    return 'The wallet refused Base Sepolia. Check PAYMASTER_URL is the Base Sepolia one (it contains /base-sepolia/).';
-  }
   return msg.split('\n')[0]!.slice(0, 160);
 }
