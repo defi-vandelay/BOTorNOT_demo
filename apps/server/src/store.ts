@@ -37,6 +37,12 @@ CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS usage (
+  day TEXT NOT NULL,
+  key TEXT NOT NULL,
+  count INTEGER NOT NULL,
+  PRIMARY KEY (day, key)
+);
 `;
 
 export interface StoredRound {
@@ -154,6 +160,29 @@ export class Store {
 
   removeChainClaims(epoch: number): void {
     this.db.prepare('DELETE FROM chain_claims WHERE epoch = ?').run(epoch);
+  }
+
+  // ---------- daily limits ----------
+
+  usage(day: string, key: string): number {
+    const row = this.db
+      .prepare('SELECT count FROM usage WHERE day = ? AND key = ?')
+      .get(day, key) as { count: number } | undefined;
+    return row?.count ?? 0;
+  }
+
+  addUsage(day: string, key: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO usage (day, key, count) VALUES (?, ?, 1)
+         ON CONFLICT(day, key) DO UPDATE SET count = count + 1`,
+      )
+      .run(day, key);
+  }
+
+  /** Drops counts from before this day. */
+  pruneUsage(day: string): void {
+    this.db.prepare('DELETE FROM usage WHERE day < ?').run(day);
   }
 
   // ---------- rounds ----------

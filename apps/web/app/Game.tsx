@@ -10,6 +10,7 @@ import { Result } from './screens/Result';
 import { Void } from './screens/Void';
 import { SettlementCard } from './screens/SettlementCard';
 import { WalletPanel } from './screens/WalletPanel';
+import { InviteOnly } from './screens/InviteOnly';
 
 export function Game() {
   const { state, actions, address } = useGame();
@@ -40,10 +41,12 @@ export function Game() {
             <span
               className={`h-2 w-2 rounded-full ${state.welcome ? 'bg-green-500' : 'bg-red-500'}`}
             />
-            {state.welcome ? 'Connected' : 'Connecting…'}
+            {state.welcome ? 'Connected' : state.inviteRequired ? 'Invite only' : 'Connecting…'}
           </span>
         </div>
       </header>
+
+      {state.inviteRequired && <InviteOnly />}
 
       {state.settlement && (state.screen === 'lobby' || state.screen === 'result') && (
         <SettlementCard
@@ -54,7 +57,7 @@ export function Game() {
         />
       )}
 
-      {state.screen === 'lobby' && (
+      {state.screen === 'lobby' && !state.inviteRequired && (
         <Lobby ready={!!state.welcome} mode={mode} error={state.error} onFind={actions.findMatch}>
           <WalletPanel
             state={state}

@@ -1,4 +1,6 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
+import { formatEther } from 'viem';
 import { WebSocketServer, type WebSocket } from 'ws';
 import {
   SIGN_IN_TTL_MS,
@@ -19,6 +21,7 @@ import { Store } from './store';
 import { Chain } from './chain/chain';
 import type { Bank } from './game/bank';
 import { OnchainBank, brief } from './game/onchain-bank';
+import { DailyLimits } from './game/limits';
 
 export interface GameServer {
   http: Server;
@@ -35,11 +38,23 @@ export interface ServerDeps {
   log?: (msg: string) => void;
 }
 
+/**
+ * The player's IP. Behind a host's proxy (Railway, Fly.io) it's the last X-Forwarded-For entry,
+ * the one the proxy added; earlier entries come from the client and can be made up.
+ */
 function clientIp(req: IncomingMessage): string {
   const forwarded = req.headers['x-forwarded-for'];
-  const first = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0];
-  return first?.trim() || req.socket.remoteAddress || 'unknown';
+  const last = (Array.isArray(forwarded) ? forwarded.join(',') : forwarded)?.split(',').at(-1);
+  return last?.trim() || req.socket.remoteAddress || 'unknown';
 }
+
+/** Compares an invite code without leaking how much of it matched. */
+function sameCode(given: string | undefined, expected: string): boolean {
+  const digest = (v: string) => createHash('sha256').update(v).digest();
+  return given !== undefined && timingSafeEqual(digest(given), digest(expected));
+}
+
+const GAS_CHECK_MS = 10 * 60_000;
 
 /** HTTP (/health, /stats) plus the WebSocket game endpoint (/ws). */
 export function startServer(config: Config, deps: ServerDeps): GameServer {
@@ -49,6 +64,14 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
   const store = new Store(config.DB_PATH);
   const stats = new Stats(store);
   const players = new Set<Player>();
+  // A hosted game caps daily rounds and wallet actions; dev mode (one machine) doesn't.
+  const limits = config.DEV_MODE
+    ? undefined
+    : new DailyLimits(store, {
+        roundsPerPlayer: config.ROUNDS_PER_PLAYER_PER_DAY,
+        botRounds: config.BOT_ROUNDS_PER_DAY,
+        walletActions: config.WALLET_ACTIONS_PER_DAY,
+      });
   const ledger = new Ledger({
     epochMs: config.EPOCH_MS,
     store,
@@ -110,6 +133,8 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
           `on-chain: GameVault ${chain.vault}, token ${chain.token}, ${chain.epochLength}s pools`,
         );
         bank.start();
+        void checkGas();
+        gasTimer = setInterval(() => void checkGas(), GAS_CHECK_MS);
       },
       (err: unknown) => {
         log(`on-chain setup failed, wallet play is off: ${String(err)}`);
@@ -119,6 +144,24 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
     chainReady.catch(() => undefined);
   }
   const bank: Bank = onchain ?? ledger;
+
+  /** The operator pays everyone's gas: warn in the logs (and on /health) before it runs out. */
+  let gas: { eth: number; low: boolean } | undefined;
+  let gasTimer: NodeJS.Timeout | undefined;
+  const checkGas = async () => {
+    try {
+      const eth = Number(formatEther(await chain!.operatorBalance()));
+      gas = { eth, low: eth < config.OPERATOR_LOW_ETH };
+      if (gas.low) {
+        log(
+          `WARNING: the operator has ${eth} ETH left for gas. Send it Base Sepolia ETH from a ` +
+            `faucet: ${operator.address}`,
+        );
+      }
+    } catch (err) {
+      log(`could not read the operator's ETH: ${brief(err)}`);
+    }
+  };
   const tokenBalance = (address: string): ServerMessage => ({
     type: 'balance',
     points: onchain!.balance(address),
@@ -136,6 +179,7 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
     ledger: bank,
     botShare: config.BOT_SHARE,
     allowSameIp: config.DEV_MODE,
+    onRoundStart: limits && ((ps, bot) => limits.roundStarted(ps, bot)),
     log,
   });
   matchmaker.start();
@@ -148,7 +192,13 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
       });
       res.end(JSON.stringify(body));
     };
-    if (req.url === '/health') return json({ ok: true, llm: config.LLM_PROVIDER });
+    if (req.url === '/health') {
+      return json({
+        ok: true,
+        llm: config.LLM_PROVIDER,
+        onchain: chain && { operator: operator.address, operatorEth: gas?.eth, lowGas: gas?.low },
+      });
+    }
     if (req.url === '/stats') return json(stats);
     if (req.url === '/pool') return json(onchain ?? ledger);
     res.writeHead(404).end();
@@ -176,6 +226,12 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
     const hello = async (msg: Extract<ClientMessage, { type: 'hello' }>) => {
       if (greeting) return;
       greeting = true;
+      if (config.INVITE_CODE && !sameCode(msg.invite, config.INVITE_CODE)) {
+        log(`turned away ${clientIp(req)}: no valid invite`);
+        send({ type: 'invite.required' });
+        ws.close(1008, 'invite required');
+        return;
+      }
       let mode: Player['mode'] = 'points';
       if (chain) {
         mode = 'free';
@@ -256,6 +312,8 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
       if (walletBusy) {
         return send({ type: 'wallet.result', action, ok: false, message: 'already on it' });
       }
+      const limited = limits?.useWalletAction(p.address);
+      if (limited) return send({ type: 'wallet.result', action, ok: false, message: limited });
       walletBusy = true;
       try {
         const txHash = await run();
@@ -286,13 +344,14 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
         case 'queue.join': {
           if (current) return send({ type: 'error', message: 'already in a round' });
           const why =
-            player.mode === 'free'
+            limits?.whyNotPlay(player) ??
+            (player.mode === 'free'
               ? null
               : player.mode === 'tokens'
                 ? onchain!.whyNot(player.address)
                 : ledger.canStake(player.address)
                   ? null
-                  : 'not enough points';
+                  : 'not enough points');
           if (why) return send({ type: 'error', message: why });
           matchmaker.join(player);
           return send({ type: 'queue.waiting' });
@@ -376,6 +435,7 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
         matchmaker.stop();
         ledger.stop();
         onchain?.stop();
+        clearInterval(gasTimer);
         for (const client of wss.clients) client.terminate();
         wss.close(() =>
           http.close(() => {

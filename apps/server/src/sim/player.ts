@@ -92,7 +92,11 @@ export class SimPlayer {
     const ws = new WebSocket(this.opts.url);
     this.ws = ws;
     ws.on('open', () => {
-      this.send({ type: 'hello', address: this.address });
+      this.send({
+        type: 'hello',
+        address: this.address,
+        invite: process.env.INVITE_CODE || undefined,
+      });
       void this.requeue(0);
     });
     ws.on('message', (data) => {

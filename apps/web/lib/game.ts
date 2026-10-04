@@ -35,6 +35,8 @@ export interface GameState {
   settleTx?: `0x${string}`;
   /** The latest payout pool this player had calls in, until dismissed. */
   settlement?: Settlement;
+  /** The server is invite-only and this browser has no valid invite. */
+  inviteRequired?: boolean;
 }
 
 export type Action =
@@ -114,6 +116,8 @@ function onServer(state: GameState, msg: ServerMessage, now: number): GameState 
     case 'wallet.result':
       // Answers a request useGame is waiting on.
       return state;
+    case 'invite.required':
+      return { ...state, inviteRequired: true };
     case 'error':
       // Turned away from the queue: back to the lobby, where the message is shown.
       if (state.screen === 'waiting') return { ...state, screen: 'lobby', error: msg.message };

@@ -1,0 +1,12 @@
+# Keep secrets, local data and build output out of Docker images.
+**/.env
+**/.env.*
+!**/.env.example
+**/node_modules
+**/data
+**/*.db*
+**/.next
+.git
+packages/contracts/out
+packages/contracts/cache
+packages/contracts/lib

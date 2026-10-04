@@ -118,6 +118,11 @@ export class Chain {
     });
   }
 
+  /** The operator's ETH, which pays the gas for every round and wallet action (wei). */
+  operatorBalance(): Promise<bigint> {
+    return this.public.getBalance({ address: this.wallet.account.address });
+  }
+
   /** Unix ms until which the operator may stake for this player (0 = no session). */
   async sessionExpiry(player: Address): Promise<number> {
     const s = await this.public.readContract({

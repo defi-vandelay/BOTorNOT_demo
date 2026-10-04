@@ -31,6 +31,20 @@ const schema = z.object({
     .string()
     .regex(/^0x[0-9a-fA-F]{64}$/, 'must be a 0x-prefixed 32-byte hex key')
     .optional(),
+  /** When set, only players whose invite link carries this code (?invite=...) can connect. */
+  INVITE_CODE: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{6,100}$/, 'must be 6 to 100 letters, digits, - or _')
+    .optional(),
+  /**
+   * Daily limits that keep a hosted game's costs bounded (0 = no limit). They reset at midnight
+   * UTC and are off in dev mode.
+   */
+  ROUNDS_PER_PLAYER_PER_DAY: z.coerce.number().int().min(0).default(40),
+  BOT_ROUNDS_PER_DAY: z.coerce.number().int().min(0).default(400),
+  WALLET_ACTIONS_PER_DAY: z.coerce.number().int().min(0).default(10),
+  /** Warn when the operator's ETH, which pays everyone's gas, drops below this. */
+  OPERATOR_LOW_ETH: z.coerce.number().min(0).default(0.01),
 });
 
 export type Config = Omit<z.infer<typeof schema>, 'LLM_PROVIDER' | 'DEV_MODE'> & {

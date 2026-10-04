@@ -18,6 +18,8 @@ export const clientMessage = z.discriminatedUnion('type', [
     address,
     /** Wallet players (on-chain mode): a signature over signInMessage(), proving the address. */
     auth: z.object({ issuedAt: z.number().int(), signature: hex }).optional(),
+    /** The code from the player's invite link, when the server is invite-only. */
+    invite: z.string().max(200).optional(),
   }),
   /**
    * A wallet player tops up without sending a transaction: the server claims the test-token
@@ -139,6 +141,8 @@ export const serverMessage = z.discriminatedUnion('type', [
     message: z.string().optional(),
     txHash: hex.optional(),
   }),
+  /** The server is invite-only and this hello had no valid invite; the connection then closes. */
+  z.object({ type: z.literal('invite.required') }),
   z.object({ type: z.literal('error'), message: z.string() }),
 ]);
 export type ServerMessage = z.infer<typeof serverMessage>;
