@@ -190,23 +190,28 @@ contract GameVaultTest is Test {
         vault.startSessionFor(dave, 7, sig);
         assertEq(vault.sessionExpiry(dave), block.timestamp + 7 days);
         assertEq(vault.nonces(dave), 1);
+        // Signatures are made first: expectRevert applies to the very next call.
+        bytes memory sevenDays = _sign(key, vault.sessionMessage(7, 1));
+        bytes memory forCarol = _sign(key, vault.sessionMessage(7, 0));
         // Used once only.
         vm.expectRevert(GameVault.BadSignature.selector);
         vault.startSessionFor(dave, 7, sig);
         // Signed for 7 days, not 30.
         vm.expectRevert(GameVault.BadSignature.selector);
-        vault.startSessionFor(dave, 30, _sign(key, vault.sessionMessage(7, 1)));
+        vault.startSessionFor(dave, 30, sevenDays);
         // Someone else's signature.
         vm.expectRevert(GameVault.BadSignature.selector);
-        vault.startSessionFor(carol, 7, _sign(key, vault.sessionMessage(7, 0)));
+        vault.startSessionFor(carol, 7, forCarol);
     }
 
     function test_startSessionForBounds() public {
         (address dave, uint256 key) = makeAddrAndKey("dave");
+        bytes memory zero = _sign(key, vault.sessionMessage(0, 0));
+        bytes memory tooLong = _sign(key, vault.sessionMessage(31, 0));
         vm.expectRevert(GameVault.BadSessionExpiry.selector);
-        vault.startSessionFor(dave, 0, _sign(key, vault.sessionMessage(0, 0)));
+        vault.startSessionFor(dave, 0, zero);
         vm.expectRevert(GameVault.BadSessionExpiry.selector);
-        vault.startSessionFor(dave, 31, _sign(key, vault.sessionMessage(31, 0)));
+        vault.startSessionFor(dave, 31, tooLong);
     }
 
     function test_startSessionForASmartWallet() public {
@@ -215,8 +220,9 @@ contract GameVaultTest is Test {
         vault.startSessionFor(wallet, 7, _sign(key, vault.sessionMessage(7, 0)));
         assertEq(vault.sessionExpiry(wallet), block.timestamp + 7 days);
         (, uint256 otherKey) = makeAddrAndKey("other");
+        bytes memory notTheOwner = _sign(otherKey, vault.sessionMessage(7, 1));
         vm.expectRevert(GameVault.BadSignature.selector);
-        vault.startSessionFor(wallet, 7, _sign(otherKey, vault.sessionMessage(7, 1)));
+        vault.startSessionFor(wallet, 7, notTheOwner);
     }
 
     function test_withdrawAllFor() public {
@@ -227,10 +233,11 @@ contract GameVaultTest is Test {
         vault.withdrawAllFor(dave, sig);
         assertEq(vault.balanceOf(dave), 0);
         assertEq(token.balanceOf(dave), 1_000e18);
+        bytes memory next = _sign(key, vault.withdrawAllMessage(1));
         vm.expectRevert(GameVault.BadSignature.selector);
         vault.withdrawAllFor(dave, sig);
         vm.expectRevert(GameVault.ZeroAmount.selector);
-        vault.withdrawAllFor(dave, _sign(key, vault.withdrawAllMessage(1)));
+        vault.withdrawAllFor(dave, next);
     }
 
     // ---------- settlement ----------
