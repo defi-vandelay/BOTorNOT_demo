@@ -58,11 +58,11 @@ Without an `ANTHROPIC_API_KEY` the server uses a mock bot with canned replies, s
 
 **On-chain (Base Sepolia):** with `GAME_VAULT_ADDRESS` set in `apps/server/.env`, players who sign in with a Base Account (a passkey smart wallet, nothing to install) stake test tokens (tBON) instead of points, and guests play free. One-time setup:
 
-1. In `apps/server/.env`, set `OPERATOR_PRIVATE_KEY` to a fresh testnet-only key with some Base Sepolia ETH, and `PAYMASTER_URL` to your Coinbase Developer Platform paymaster (Base Sepolia).
+1. In `apps/server/.env`, set `OPERATOR_PRIVATE_KEY` to a fresh testnet-only key with some Base Sepolia ETH. The operator pays all gas, players' included.
 2. `pnpm deploy:testnet` compiles and deploys `GameToken` (tBON, with a free daily faucet) and `GameVault`, and saves `GAME_VAULT_ADDRESS` to `apps/server/.env`. No Foundry needed.
-3. Add the two printed contract addresses to the paymaster's contract allowlist, then `pnpm dev`.
+3. `pnpm dev`.
 
-In the lobby, a signed-in player taps **Get 1,000 free tBON and start playing**: one batched, gas-free transaction claims tokens, deposits them and starts a 7-day session that lets the server stake for them. After each round the server settles the call on-chain (the contract recomputes the commitment from the reveal and moves the stake), and when the pool closes it pays out right callers. Results link to the transactions on Basescan. The payout rules are the same as for points, now in `GameVault.sol`.
+Players' wallets only ever sign messages; the server sends the transactions. (Coinbase's wallet signs for Base Sepolia but won't send transactions there.) In the lobby, a signed-in player taps **Get 1,000 free tBON and start playing** and signs the vault's session message: the server claims the faucet straight into the game for them and starts a 7-day session that lets it stake for them. A passkey wallet that has never sent a transaction is deployed by the server on first use (ERC-6492). **Withdraw all** works the same way. After each round the server settles the call on-chain (the contract recomputes the commitment from the reveal and moves the stake), and when the pool closes it pays out right callers. Results link to the transactions on Basescan. The payout rules are the same as for points, now in `GameVault.sol`.
 
 `.env` files are git-ignored. **Never commit keys**: this repository is public.
 

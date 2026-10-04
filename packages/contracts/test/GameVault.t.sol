@@ -5,6 +5,22 @@ import {Test} from "forge-std/Test.sol";
 import {GameVault} from "../src/GameVault.sol";
 import {GameToken} from "../src/GameToken.sol";
 import {Commitment} from "../src/Commitment.sol";
+import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+
+/// A smart wallet with one owner key, standing in for a deployed passkey wallet (ERC-1271).
+contract MockWallet is IERC1271 {
+    address immutable owner;
+
+    constructor(address owner_) {
+        owner = owner_;
+    }
+
+    function isValidSignature(bytes32 hash, bytes calldata signature) external view returns (bytes4) {
+        return ECDSA.recover(hash, signature) == owner ? IERC1271.isValidSignature.selector : bytes4(0);
+    }
+}
 
 contract GameVaultTest is Test {
     uint256 constant STAKE = 100e18;
@@ -29,6 +45,7 @@ contract GameVaultTest is Test {
         vm.warp(1_000_000);
         token = new GameToken();
         vault = new GameVault(token, STAKE, EPOCH, owner, operator);
+        token.setVault(address(vault));
         for (uint256 i; i < 3; i++) {
             address p = [alice, bob, carol][i];
             vm.startPrank(p);
@@ -115,6 +132,105 @@ contract GameVaultTest is Test {
         vm.expectRevert(GameVault.BadSessionExpiry.selector);
         vault.startSession(block.timestamp + 31 days);
         vm.stopPrank();
+    }
+
+    // ---------- by signature ----------
+
+    function _sign(uint256 key, string memory message) internal pure returns (bytes memory) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, MessageHashUtils.toEthSignedMessageHash(bytes(message)));
+        return abi.encodePacked(r, s, v);
+    }
+
+    function test_vaultIsSetOnceByTheDeployer() public {
+        vm.expectRevert(GameToken.VaultAlreadySet.selector);
+        token.setVault(alice);
+        GameToken fresh = new GameToken();
+        vm.prank(alice);
+        vm.expectRevert(GameToken.VaultAlreadySet.selector);
+        fresh.setVault(alice);
+    }
+
+    function test_onlyTheVaultClaimsTheFaucetForSomeoneElse() public {
+        vm.expectRevert(GameToken.NotVault.selector);
+        token.faucetFor(alice);
+    }
+
+    function test_faucetForTopsUpThePlayerInTheGame() public {
+        (address dave,) = makeAddrAndKey("dave");
+        vm.prank(carol); // anyone can relay it; the tokens go to dave
+        vault.claimFaucetFor(dave);
+        assertEq(vault.balanceOf(dave), 1_000e18);
+        assertEq(token.balanceOf(carol), 0);
+        vm.expectRevert(abi.encodeWithSelector(GameToken.FaucetCooldown.selector, block.timestamp + 1 days));
+        vault.claimFaucetFor(dave);
+        // The cooldown is shared with the wallet faucet: alice claimed hers in setUp.
+        vm.expectRevert(abi.encodeWithSelector(GameToken.FaucetCooldown.selector, block.timestamp + 1 days));
+        vault.claimFaucetFor(alice);
+    }
+
+    function test_messagesSayWhatTheyDo() public view {
+        string memory footer = string.concat(
+            "Vault: ", vm.toString(address(vault)), "\nChain: ", vm.toString(block.chainid), "\nNonce: 3"
+        );
+        assertEq(
+            vault.sessionMessage(7, 3),
+            string.concat(
+                "BOT or NOT: start a 7-day session.\n\nThe game may stake 100 tBON on each call I make until it ends.\n\n",
+                footer
+            )
+        );
+        assertEq(
+            vault.withdrawAllMessage(3), string.concat("BOT or NOT: withdraw all my tBON to my wallet.\n\n", footer)
+        );
+    }
+
+    function test_startSessionForAnEoa() public {
+        (address dave, uint256 key) = makeAddrAndKey("dave");
+        bytes memory sig = _sign(key, vault.sessionMessage(7, 0));
+        vault.startSessionFor(dave, 7, sig);
+        assertEq(vault.sessionExpiry(dave), block.timestamp + 7 days);
+        assertEq(vault.nonces(dave), 1);
+        // Used once only.
+        vm.expectRevert(GameVault.BadSignature.selector);
+        vault.startSessionFor(dave, 7, sig);
+        // Signed for 7 days, not 30.
+        vm.expectRevert(GameVault.BadSignature.selector);
+        vault.startSessionFor(dave, 30, _sign(key, vault.sessionMessage(7, 1)));
+        // Someone else's signature.
+        vm.expectRevert(GameVault.BadSignature.selector);
+        vault.startSessionFor(carol, 7, _sign(key, vault.sessionMessage(7, 0)));
+    }
+
+    function test_startSessionForBounds() public {
+        (address dave, uint256 key) = makeAddrAndKey("dave");
+        vm.expectRevert(GameVault.BadSessionExpiry.selector);
+        vault.startSessionFor(dave, 0, _sign(key, vault.sessionMessage(0, 0)));
+        vm.expectRevert(GameVault.BadSessionExpiry.selector);
+        vault.startSessionFor(dave, 31, _sign(key, vault.sessionMessage(31, 0)));
+    }
+
+    function test_startSessionForASmartWallet() public {
+        (address owner_, uint256 key) = makeAddrAndKey("passkey");
+        address wallet = address(new MockWallet(owner_));
+        vault.startSessionFor(wallet, 7, _sign(key, vault.sessionMessage(7, 0)));
+        assertEq(vault.sessionExpiry(wallet), block.timestamp + 7 days);
+        (, uint256 otherKey) = makeAddrAndKey("other");
+        vm.expectRevert(GameVault.BadSignature.selector);
+        vault.startSessionFor(wallet, 7, _sign(otherKey, vault.sessionMessage(7, 1)));
+    }
+
+    function test_withdrawAllFor() public {
+        (address dave, uint256 key) = makeAddrAndKey("dave");
+        vault.claimFaucetFor(dave);
+        bytes memory sig = _sign(key, vault.withdrawAllMessage(0));
+        vm.prank(carol);
+        vault.withdrawAllFor(dave, sig);
+        assertEq(vault.balanceOf(dave), 0);
+        assertEq(token.balanceOf(dave), 1_000e18);
+        vm.expectRevert(GameVault.BadSignature.selector);
+        vault.withdrawAllFor(dave, sig);
+        vm.expectRevert(GameVault.ZeroAmount.selector);
+        vault.withdrawAllFor(dave, _sign(key, vault.withdrawAllMessage(1)));
     }
 
     // ---------- settlement ----------

@@ -15,6 +15,8 @@ export function useGame() {
   const [state, dispatch] = useReducer(reduce, initialState);
   const wsRef = useRef<WebSocket | null>(null);
   const lastTypingRef = useRef(0);
+  // The signed top-up or withdrawal waiting for the server's wallet.result.
+  const pendingRef = useRef<{ resolve: () => void; reject: (err: Error) => void } | null>(null);
   // Created after mount: keys live in browser storage, which doesn't exist during server render.
   // A wallet sign-in (on-chain mode) takes over from the per-tab guest key.
   const [guest, setGuest] = useState<ReturnType<typeof guestAccount> | null>(null);
@@ -43,9 +45,18 @@ export function useGame() {
       };
       ws.onmessage = (event) => {
         const msg = parseServerMessage(String(event.data));
-        if (msg) dispatch({ type: 'server', msg, now: Date.now() });
+        if (!msg) return;
+        if (msg.type === 'wallet.result') {
+          const pending = pendingRef.current;
+          pendingRef.current = null;
+          if (msg.ok) pending?.resolve();
+          else pending?.reject(new Error(msg.message ?? 'it did not go through'));
+        }
+        dispatch({ type: 'server', msg, now: Date.now() });
       };
       ws.onclose = () => {
+        pendingRef.current?.reject(new Error('lost the connection to the game, try again'));
+        pendingRef.current = null;
         dispatch({ type: 'connected', connected: false });
         if (!closed) retry = setTimeout(connect, 2_000);
       };
@@ -100,9 +111,17 @@ export function useGame() {
         signOut();
         setWallet(null);
       },
-      /** After a deposit, withdrawal or session change: ask the server to re-read the chain. */
-      walletChanged() {
-        send({ type: 'wallet.refresh' });
+      /** Sends a signed top-up or withdrawal; resolves once the server has put it on-chain. */
+      wallet(msg: Extract<ClientMessage, { type: 'wallet.topUp' | 'wallet.withdraw' }>) {
+        return new Promise<void>((resolve, reject) => {
+          const ws = wsRef.current;
+          if (ws?.readyState !== WebSocket.OPEN) {
+            return reject(new Error('not connected to the game, try again'));
+          }
+          pendingRef.current?.reject(new Error('replaced by a newer request'));
+          pendingRef.current = { resolve, reject };
+          ws.send(JSON.stringify(msg));
+        });
       },
     }),
     [send],

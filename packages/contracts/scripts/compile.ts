@@ -42,7 +42,7 @@ export function compile(): Artifacts {
     settings: {
       // Matches foundry.toml.
       optimizer: { enabled: true, runs: 200 },
-      evmVersion: 'shanghai',
+      evmVersion: 'cancun',
       outputSelection: { '*': { '*': ['abi', 'evm.bytecode.object'] } },
     },
   };

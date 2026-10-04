@@ -1,20 +1,12 @@
-import {
-  createPublicClient,
-  createWalletClient,
-  custom,
-  encodeFunctionData,
-  http,
-  maxUint256,
-  type Address,
-  type Hex,
-} from 'viem';
+import { createPublicClient, createWalletClient, custom, http, type Address, type Hex } from 'viem';
 import { baseSepolia } from 'viem/chains';
 import { SIGN_IN_TTL_MS, gameTokenAbi, gameVaultAbi, signInMessage } from '@botornot/shared';
 
 /**
  * Base Account (Coinbase's smart wallet: a passkey, nothing to install) on Base Sepolia.
- * The player signs in once with a message the game server checks; after that every transaction
- * is a batch of calls whose gas the paymaster sponsors.
+ * The wallet is only ever asked to sign messages: one to sign in, which the game server checks,
+ * and one each to start a session or withdraw, which the server sends on-chain and pays for.
+ * (The wallet signs for Base Sepolia but won't send transactions there.)
  */
 
 const STORAGE_KEY = 'botornot.wallet';
@@ -28,10 +20,12 @@ export interface WalletSignIn {
 }
 
 export interface WalletBalances {
-  /** Test tokens in the wallet, not yet deposited. */
+  /** Test tokens in the wallet itself (withdrawn from the game). */
   wallet: bigint;
   /** When the token faucet can be used again (unix ms; 0 = now). */
   faucetReadyAt: number;
+  /** The vault's nonce for the player's next signed message. */
+  nonce: bigint;
 }
 
 type Provider = Parameters<typeof custom>[0];
@@ -94,8 +88,14 @@ export function signOut(): void {
   }
 }
 
-export async function readBalances(token: Address, player: Address): Promise<WalletBalances> {
-  const [wallet, lastClaim, cooldown] = await Promise.all([
+export interface Contracts {
+  token: Address;
+  vault: Address;
+}
+
+export async function readBalances(c: Contracts, player: Address): Promise<WalletBalances> {
+  const { token, vault } = c;
+  const [wallet, lastClaim, cooldown, nonce] = await Promise.all([
     publicClient.readContract({
       address: token,
       abi: gameTokenAbi,
@@ -113,92 +113,42 @@ export async function readBalances(token: Address, player: Address): Promise<Wal
       abi: gameTokenAbi,
       functionName: 'FAUCET_COOLDOWN',
     }),
+    publicClient.readContract({
+      address: vault,
+      abi: gameVaultAbi,
+      functionName: 'nonces',
+      args: [player],
+    }),
   ]);
   const readyAt = lastClaim === 0n ? 0 : Number(lastClaim + cooldown) * 1000;
-  return { wallet, faucetReadyAt: readyAt };
+  return { wallet, faucetReadyAt: readyAt, nonce };
 }
 
-export interface Contracts {
-  token: Address;
-  vault: Address;
-}
-
-type CallData = { to: Address; data: Hex };
-
-/**
- * Everything needed to be ready to play, in one batch: claim free tokens if the faucet is ready,
- * deposit whatever is in the wallet, and (re)start a staking session.
- */
-export function topUpCalls(
+/** Signs the vault's own wording for a session of `days` days (GameVault.sessionMessage). */
+export async function signSession(
   c: Contracts,
-  opts: { claimFaucet: boolean; walletTokens: bigint; startSession: boolean },
-): CallData[] {
-  const calls: CallData[] = [];
-  const deposit = opts.walletTokens + (opts.claimFaucet ? 1_000n * UNIT : 0n);
-  if (opts.claimFaucet) {
-    calls.push({
-      to: c.token,
-      data: encodeFunctionData({ abi: gameTokenAbi, functionName: 'faucet' }),
-    });
-  }
-  if (deposit > 0n) {
-    calls.push(
-      {
-        to: c.token,
-        data: encodeFunctionData({
-          abi: gameTokenAbi,
-          functionName: 'approve',
-          args: [c.vault, maxUint256],
-        }),
-      },
-      {
-        to: c.vault,
-        data: encodeFunctionData({ abi: gameVaultAbi, functionName: 'deposit', args: [deposit] }),
-      },
-    );
-  }
-  if (opts.startSession) {
-    const expiry = BigInt(Math.floor(Date.now() / 1000) + SESSION_DAYS * 86_400);
-    calls.push({
-      to: c.vault,
-      data: encodeFunctionData({
-        abi: gameVaultAbi,
-        functionName: 'startSession',
-        args: [expiry],
-      }),
-    });
-  }
-  return calls;
-}
-
-export function withdrawCalls(c: Contracts, wholeTokens: number): CallData[] {
-  return [
-    {
-      to: c.vault,
-      data: encodeFunctionData({
-        abi: gameVaultAbi,
-        functionName: 'withdraw',
-        args: [BigInt(wholeTokens) * UNIT],
-      }),
-    },
-  ];
-}
-
-/** Sends a batch from the player's wallet and waits for it to land. */
-export async function sendCalls(
-  from: Address,
-  calls: CallData[],
-  paymasterUrl?: string,
-): Promise<void> {
-  const client = await walletClient();
-  const { id } = await client.sendCalls({
-    account: from,
-    calls,
-    forceAtomic: true,
-    capabilities: paymasterUrl ? { paymasterService: { url: paymasterUrl } } : undefined,
+  player: Address,
+  days: number,
+  nonce: bigint,
+): Promise<Hex> {
+  const message = await publicClient.readContract({
+    address: c.vault,
+    abi: gameVaultAbi,
+    functionName: 'sessionMessage',
+    args: [BigInt(days), nonce],
   });
-  const result = await client.waitForCallsStatus({ id, timeout: 120_000 });
-  if (result.status !== 'success') throw new Error('The transaction did not go through');
+  return (await walletClient()).signMessage({ account: player, message });
+}
+
+/** Signs the vault's wording for withdrawing the whole balance (GameVault.withdrawAllMessage). */
+export async function signWithdrawAll(c: Contracts, player: Address, nonce: bigint): Promise<Hex> {
+  const message = await publicClient.readContract({
+    address: c.vault,
+    abi: gameVaultAbi,
+    functionName: 'withdrawAllMessage',
+    args: [nonce],
+  });
+  return (await walletClient()).signMessage({ account: player, message });
 }
 
 /** Whole tokens for display. */

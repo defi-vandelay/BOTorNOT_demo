@@ -111,6 +111,9 @@ function onServer(state: GameState, msg: ServerMessage, now: number): GameState 
       return msg.roundId === state.roundId ? { ...state, settleTx: msg.txHash } : state;
     case 'epoch.settled':
       return { ...state, settlement: msg };
+    case 'wallet.result':
+      // Answers a request useGame is waiting on.
+      return state;
     case 'error':
       // Turned away from the queue: back to the lobby, where the message is shown.
       if (state.screen === 'waiting') return { ...state, screen: 'lobby', error: msg.message };

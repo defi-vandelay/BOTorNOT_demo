@@ -61,7 +61,7 @@ export function Game() {
             address={address}
             onSignIn={actions.signIn}
             onSignOut={actions.signOut}
-            onChanged={actions.walletChanged}
+            onRequest={actions.wallet}
           />
         </Lobby>
       )}

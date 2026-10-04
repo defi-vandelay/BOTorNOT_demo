@@ -17,9 +17,8 @@ import { operatorAccount } from './operator';
 import { Headlines } from './bots/context';
 import { Store } from './store';
 import { Chain } from './chain/chain';
-import { paymasterProblem } from './chain/paymaster';
 import type { Bank } from './game/bank';
-import { OnchainBank } from './game/onchain-bank';
+import { OnchainBank, brief } from './game/onchain-bank';
 
 export interface GameServer {
   http: Server;
@@ -119,12 +118,6 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
     );
     chainReady.catch(() => undefined);
   }
-  // Checked once at startup; players see the problem next to the button it breaks.
-  const paymasterChecked: Promise<string | undefined> =
-    chain && config.PAYMASTER_URL
-      ? paymasterProblem(config.PAYMASTER_URL, config.CHAIN_ID)
-      : Promise.resolve(undefined);
-  void paymasterChecked.then((problem) => problem && log(`paymaster: ${problem}`));
   const bank: Bank = onchain ?? ledger;
   const tokenBalance = (address: string): ServerMessage => ({
     type: 'balance',
@@ -190,11 +183,7 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
         else if (msg.auth) send({ type: 'error', message: 'wallet sign-in failed' });
       }
       // Read the wallet's balance and session before the welcome, so a join right after works.
-      let paymasterIssue: string | undefined;
-      if (mode === 'tokens') {
-        await refreshWallet(msg.address, false);
-        paymasterIssue = await paymasterChecked;
-      }
+      if (mode === 'tokens') await refreshWallet(msg.address, false);
       if (ws.readyState !== ws.OPEN) return;
       const p: Player = {
         id: `p${nextId++}`,
@@ -218,8 +207,6 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
           vault: chain.vault,
           token: chain.token,
           explorer: chain.explorer,
-          paymasterUrl: config.PAYMASTER_URL,
-          paymasterIssue,
         },
       });
       if (mode === 'points') send({ type: 'balance', points: ledger.balance(p.address) });
@@ -256,6 +243,33 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
       }
     };
 
+    /**
+     * A wallet player's signed action. The operator sends the transaction and pays the gas, so a
+     * wallet that can only sign (or holds no ETH) can still play. One at a time per connection.
+     */
+    let walletBusy = false;
+    const walletAction = async (
+      p: Player,
+      action: 'topUp' | 'withdraw',
+      run: () => Promise<`0x${string}` | undefined>,
+    ) => {
+      if (walletBusy) {
+        return send({ type: 'wallet.result', action, ok: false, message: 'already on it' });
+      }
+      walletBusy = true;
+      try {
+        const txHash = await run();
+        log(`player ${p.id}: ${action} done${txHash ? ` (${txHash})` : ''}`);
+        await refreshWallet(p.address);
+        send({ type: 'wallet.result', action, ok: true, txHash });
+      } catch (err) {
+        log(`player ${p.id}: ${action} failed: ${brief(err)}`);
+        send({ type: 'wallet.result', action, ok: false, message: brief(err) });
+      } finally {
+        walletBusy = false;
+      }
+    };
+
     ws.on('message', (data) => {
       const msg = parseClientMessage(data.toString());
       if (!msg) return send({ type: 'error', message: 'invalid message' });
@@ -283,9 +297,45 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
           matchmaker.join(player);
           return send({ type: 'queue.waiting' });
         }
-        case 'wallet.refresh':
-          if (player.mode === 'tokens') void refreshWallet(player.address);
+        case 'wallet.topUp': {
+          if (player.mode !== 'tokens') {
+            return send({ type: 'error', message: 'sign in with a wallet first' });
+          }
+          const { address } = player;
+          void walletAction(player, 'topUp', async () => {
+            let txHash: `0x${string}` | undefined;
+            if (msg.session) {
+              txHash = await chain!.startSessionFor(
+                address,
+                msg.session.days,
+                msg.session.signature,
+              );
+            }
+            if (msg.faucet) txHash = await chain!.claimFaucetFor(address);
+            return txHash;
+          });
           return;
+        }
+        case 'wallet.withdraw': {
+          if (player.mode !== 'tokens') {
+            return send({ type: 'error', message: 'sign in with a wallet first' });
+          }
+          // Stakes for a round in play are still in the vault balance.
+          if (current) {
+            return send({
+              type: 'wallet.result',
+              action: 'withdraw',
+              ok: false,
+              message: 'finish your round first',
+            });
+          }
+          matchmaker.leave(player);
+          const { address } = player;
+          void walletAction(player, 'withdraw', () =>
+            chain!.withdrawAllFor(address, msg.signature),
+          );
+          return;
+        }
         case 'queue.leave':
           return matchmaker.leave(player);
         case 'chat.typing':
