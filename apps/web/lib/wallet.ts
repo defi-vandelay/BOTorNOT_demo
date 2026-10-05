@@ -1,13 +1,18 @@
 import { createPublicClient, createWalletClient, custom, http, type Address, type Hex } from 'viem';
 import { baseSepolia } from 'viem/chains';
 import { SIGN_IN_TTL_MS, gameTokenAbi, gameVaultAbi, signInMessage } from '@botornot/shared';
+import { signAs, signOutEmbedded } from './embedded';
 
 /**
- * Base Account (Coinbase's smart wallet: a passkey, nothing to install) on Base Sepolia.
- * The wallet is only ever asked to sign messages: one to sign in, which the game server checks,
- * and one each to start a session or withdraw, which the server sends on-chain and pays for.
- * (The wallet signs for Base Sepolia but won't send transactions there.)
+ * Two kinds of wallet on Base Sepolia, both only ever asked to sign messages: one to sign in,
+ * which the game server checks, and one each to start a session or withdraw, which the server
+ * sends on-chain and pays for.
+ * - "embedded": created for players who sign in with an email code or Google, Apple or X
+ *   (see embedded.ts). Signs on this page, with no popup.
+ * - "base": a Base Account (Coinbase's smart wallet: a passkey, nothing to install). Signs in
+ *   Coinbase's popup. (It signs for Base Sepolia but won't send transactions there.)
  */
+export type WalletKind = 'embedded' | 'base';
 
 const STORAGE_KEY = 'botornot.wallet';
 const UNIT = 10n ** 18n;
@@ -17,6 +22,8 @@ export interface WalletSignIn {
   address: Address;
   issuedAt: number;
   signature: Hex;
+  /** Missing on sign-ins saved before embedded wallets, which were all Base Accounts. */
+  kind?: WalletKind;
 }
 
 export interface WalletBalances {
@@ -48,21 +55,34 @@ const publicClient = createPublicClient({
   transport: http(process.env.NEXT_PUBLIC_RPC_URL || undefined),
 });
 
-/** A sign-in saved by this browser that the server will still accept. */
-export function savedSignIn(): WalletSignIn | null {
+function saved(): WalletSignIn | null {
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null') as WalletSignIn | null;
-    if (saved && Date.now() - saved.issuedAt < SIGN_IN_TTL_MS - 60_000) return saved;
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null') as WalletSignIn | null;
   } catch {
-    // nothing saved, or storage is unavailable
+    return null; // nothing saved, or storage is unavailable
   }
-  return null;
 }
 
-export async function signIn(): Promise<WalletSignIn> {
-  const client = await walletClient();
-  const [address] = await client.requestAddresses();
-  if (!address) throw new Error('No account selected');
+/** A sign-in saved by this browser that the server will still accept. */
+export function savedSignIn(): WalletSignIn | null {
+  const signIn = saved();
+  return signIn && Date.now() - signIn.issuedAt < SIGN_IN_TTL_MS - 60_000 ? signIn : null;
+}
+
+/** How this browser last signed in, even if that sign-in has since run out. */
+export function lastWalletKind(): WalletKind | null {
+  const signIn = saved();
+  return signIn ? (signIn.kind ?? 'base') : null;
+}
+
+/** Signs `message` with the player's wallet, whichever kind it is. */
+function signWith(who: Pick<WalletSignIn, 'address' | 'kind'>, message: string): Promise<Hex> {
+  if (who.kind === 'embedded') return signAs(who.address, message);
+  return walletClient().then((client) => client.signMessage({ account: who.address, message }));
+}
+
+/** Signs the game's sign-in message and remembers it for the next visit. */
+async function completeSignIn(address: Address, kind: WalletKind): Promise<WalletSignIn> {
   const issuedAt = Date.now();
   const message = signInMessage({
     address,
@@ -70,8 +90,12 @@ export async function signIn(): Promise<WalletSignIn> {
     chainId: baseSepolia.id,
     issuedAt,
   });
-  const signature = await client.signMessage({ account: address, message });
-  const result = { address, issuedAt, signature };
+  const result: WalletSignIn = {
+    address,
+    issuedAt,
+    signature: await signWith({ address, kind }, message),
+    kind,
+  };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(result));
   } catch {
@@ -80,12 +104,26 @@ export async function signIn(): Promise<WalletSignIn> {
   return result;
 }
 
-export function signOut(): void {
+export async function signInWithBaseAccount(): Promise<WalletSignIn> {
+  const client = await walletClient();
+  const [address] = await client.requestAddresses();
+  if (!address) throw new Error('No account selected');
+  return completeSignIn(address, 'base');
+}
+
+/** For a player signed in with an email code or a social account (see embedded.ts). */
+export function signInWithEmbedded(address: Address): Promise<WalletSignIn> {
+  return completeSignIn(address, 'embedded');
+}
+
+export async function signOut(): Promise<void> {
+  const kind = lastWalletKind();
   try {
     localStorage.removeItem(STORAGE_KEY);
   } catch {
     // nothing to clear
   }
+  if (kind === 'embedded') await signOutEmbedded();
 }
 
 export interface Contracts {
@@ -127,7 +165,7 @@ export async function readBalances(c: Contracts, player: Address): Promise<Walle
 /** Signs the vault's own wording for a session of `days` days (GameVault.sessionMessage). */
 export async function signSession(
   c: Contracts,
-  player: Address,
+  player: WalletSignIn,
   days: number,
   nonce: bigint,
 ): Promise<Hex> {
@@ -137,18 +175,22 @@ export async function signSession(
     functionName: 'sessionMessage',
     args: [BigInt(days), nonce],
   });
-  return (await walletClient()).signMessage({ account: player, message });
+  return signWith(player, message);
 }
 
 /** Signs the vault's wording for withdrawing the whole balance (GameVault.withdrawAllMessage). */
-export async function signWithdrawAll(c: Contracts, player: Address, nonce: bigint): Promise<Hex> {
+export async function signWithdrawAll(
+  c: Contracts,
+  player: WalletSignIn,
+  nonce: bigint,
+): Promise<Hex> {
   const message = await publicClient.readContract({
     address: c.vault,
     abi: gameVaultAbi,
     functionName: 'withdrawAllMessage',
     args: [nonce],
   });
-  return (await walletClient()).signMessage({ account: player, message });
+  return signWith(player, message);
 }
 
 /** Whole tokens for display. */

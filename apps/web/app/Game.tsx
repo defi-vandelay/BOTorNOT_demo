@@ -18,7 +18,7 @@ const chip =
   'rounded-sm border border-border px-2 py-1 font-mono text-[11px] whitespace-nowrap text-foreground';
 
 export function Game() {
-  const { state, actions, address } = useGame();
+  const { state, actions, address, wallet, resuming } = useGame();
   const mode = state.welcome?.mode;
 
   return (
@@ -71,7 +71,8 @@ export function Game() {
         <Lobby ready={!!state.welcome} mode={mode} error={state.error} onFind={actions.findMatch}>
           <WalletPanel
             state={state}
-            address={address}
+            wallet={wallet}
+            resuming={resuming}
             onSignIn={actions.signIn}
             onSignOut={actions.signOut}
             onRequest={actions.wallet}

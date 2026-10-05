@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import type { Address } from 'viem';
 import { STAKE_POINTS, type ClientMessage } from '@botornot/shared';
 import type { GameState } from '@/lib/game';
 import {
@@ -11,36 +10,41 @@ import {
   signWithdrawAll,
   wholeTokens,
   type WalletBalances,
+  type WalletSignIn,
 } from '@/lib/wallet';
 import { Button } from '@/components/ui/button';
 import { Panel } from '@/components/Panel';
+import { WalletSignInOptions } from './WalletSignIn';
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 type WalletRequest = Extract<ClientMessage, { type: 'wallet.topUp' | 'wallet.withdraw' }>;
 /** What's in progress, and whether it's waiting on the wallet or on the chain. */
-type Busy = { action: 'signIn' | 'topUp' | 'withdraw'; step: 'wallet' | 'chain' };
+type Busy = { action: 'topUp' | 'withdraw'; step: 'wallet' | 'chain' };
 
 /**
- * On-chain mode only. Guests can sign in with a Base Account to play for test tokens; signed-in
+ * On-chain mode only. Guests can sign in (WalletSignInOptions) to play for test tokens; signed-in
  * players see their balance and session and can top up or withdraw. The wallet only signs: the
  * game server sends the transactions and pays the gas.
  */
 export function WalletPanel({
   state,
-  address,
+  wallet,
+  resuming,
   onSignIn,
   onSignOut,
   onRequest,
 }: {
   state: GameState;
-  address: Address | null;
-  onSignIn: () => Promise<void>;
+  wallet: WalletSignIn | null;
+  resuming: 'working' | { error: string } | null;
+  onSignIn: (how: () => Promise<WalletSignIn>) => Promise<void>;
   onSignOut: () => void;
   onRequest: (msg: WalletRequest) => Promise<void>;
 }) {
   const welcome = state.welcome;
   const onchain = welcome?.onchain;
+  const address = wallet?.address;
   const [busy, setBusy] = useState<Busy | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [balances, setBalances] = useState<WalletBalances | null>(null);
@@ -66,27 +70,12 @@ export function WalletPanel({
     }
   };
 
-  if (!tokensMode || !address) {
+  if (!tokensMode || !wallet || !address) {
     return (
       <Panel className="p-5 text-sm">
         <p className="eyebrow">Wallet</p>
         <p className="mt-3 font-medium">You're playing free as a guest.</p>
-        <p className="mt-1 leading-relaxed text-muted-foreground">
-          Sign in with a Base Account to stake free test tokens (tBON) on your calls. It uses a
-          passkey, so there's nothing to install, and the game pays your gas.
-        </p>
-        <Button
-          variant="outline"
-          onClick={() => {
-            setBusy({ action: 'signIn', step: 'wallet' });
-            void run(onSignIn);
-          }}
-          disabled={!!busy}
-          className="mt-4 w-full"
-        >
-          {busy ? 'Waiting for your wallet…' : 'Sign in with Base Account'}
-        </Button>
-        {error && <p className="mt-2 text-destructive">{error}</p>}
+        <WalletSignInOptions resuming={resuming} onSignIn={onSignIn} />
       </Panel>
     );
   }
@@ -107,7 +96,7 @@ export function WalletPanel({
         setBusy({ action: 'topUp', step: 'wallet' });
         session = {
           days: SESSION_DAYS,
-          signature: await signSession(onchain, address, SESSION_DAYS, balances!.nonce),
+          signature: await signSession(onchain, wallet, SESSION_DAYS, balances!.nonce),
         };
       }
       setBusy({ action: 'topUp', step: 'chain' });
@@ -116,7 +105,7 @@ export function WalletPanel({
   const withdraw = () =>
     run(async () => {
       setBusy({ action: 'withdraw', step: 'wallet' });
-      const signature = await signWithdrawAll(onchain, address, balances!.nonce);
+      const signature = await signWithdrawAll(onchain, wallet, balances!.nonce);
       setBusy({ action: 'withdraw', step: 'chain' });
       await onRequest({ type: 'wallet.withdraw', signature });
     });
