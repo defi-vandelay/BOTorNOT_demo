@@ -142,6 +142,15 @@ export class Chain {
     });
   }
 
+  /** Fees taken from forfeits so far and not yet withdrawn by the owner. */
+  async fees(): Promise<bigint> {
+    return this.public.readContract({
+      address: this.vault,
+      abi: gameVaultAbi,
+      functionName: 'fees',
+    });
+  }
+
   async epoch(epoch: number): Promise<EpochResult> {
     const [rightCalls, wrongCalls, , profitPerRight, closed] = await this.public.readContract({
       address: this.vault,
