@@ -4,6 +4,9 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { serverHttpUrl } from '@/lib/serverHttp';
 import { clock, secondsLeft, useNow } from '@/lib/useNow';
+import { Badge } from '@/components/ui/badge';
+import { Panel } from '@/components/Panel';
+import { PageFrame, SiteHeader } from '@/components/Brand';
 
 interface PersonaRow {
   name: string;
@@ -80,25 +83,21 @@ export function StatsView() {
   );
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 px-4 py-6 sm:py-10">
-      <header className="flex items-center justify-between">
-        <h1 className="text-xl font-black tracking-tight">
-          BOT <span className="text-[var(--muted)]">or</span> NOT{' '}
-          <span className="font-semibold text-[var(--muted)]">stats</span>
-        </h1>
-        <Link href="/" className="text-sm text-[var(--muted)] underline">
+    <PageFrame className="max-w-2xl gap-6">
+      <SiteHeader page="stats">
+        <Link href="/" className="eyebrow transition-colors hover:text-foreground">
           Play
         </Link>
-      </header>
+      </SiteHeader>
 
       {error && (
-        <p className="text-sm text-[var(--bot)]" role="alert">
+        <p className="text-sm text-destructive" role="alert">
           {error}
         </p>
       )}
 
       {stats && (
-        <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Panel crosshairs className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
           <Tile label="Rounds" value={stats.rounds} />
           <Tile label="Bot rounds" value={stats.botRounds} />
           <Tile label="Bots fooled people" value={pct(stats.botFoolRate)} />
@@ -107,37 +106,37 @@ export function StatsView() {
           <Tile label="Bot fallbacks" value={stats.fallbacks} />
           <Tile label="Void rounds" value={stats.voids} />
           <Tile label="No-calls" value={stats.calls.noCall} />
-        </section>
+        </Panel>
       )}
 
       {pool && (
-        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 text-sm">
-          <h2 className="font-semibold">Payout pool</h2>
-          <p className="mt-2 text-[var(--muted)]">
+        <Panel className="p-5 text-sm">
+          <h2 className="eyebrow">Payout pool</h2>
+          <p className="mt-3 leading-relaxed text-muted-foreground">
             Pool #{pool.epoch} closes in {clock(secondsLeft(pool.epochEndsAt, now))} with{' '}
             {pool.pendingCalls} {pool.pendingCalls === 1 ? 'call' : 'calls'} so far. Daily pool:{' '}
-            <strong className="text-[var(--fg)]">{pool.dailyPool} pts</strong>. Fees collected:{' '}
-            {pool.feesCollected} pts.
+            <strong className="font-mono font-medium text-foreground">{pool.dailyPool} pts</strong>.
+            Fees collected: {pool.feesCollected} pts.
           </p>
           {pool.lastSettlement && (
-            <p className="mt-2 text-[var(--muted)]">
+            <p className="mt-2 leading-relaxed text-muted-foreground">
               Last settled pool #{pool.lastSettlement.epoch}: {pool.lastSettlement.rightCalls} right
               and {pool.lastSettlement.wrongCalls} wrong, +{pool.lastSettlement.profitPerRight} per
               right call, {pool.lastSettlement.deceptionPaid} paid for deception,{' '}
               {pool.lastSettlement.toDailyPool} to the daily pool.
             </p>
           )}
-        </section>
+        </Panel>
       )}
 
       {stats && (
-        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 text-sm">
-          <h2 className="font-semibold">Bots</h2>
+        <Panel className="p-5 text-sm">
+          <h2 className="eyebrow">Bots</h2>
           {personas.length === 0 ? (
-            <p className="mt-2 text-[var(--muted)]">No bot rounds yet.</p>
+            <p className="mt-3 text-muted-foreground">No bot rounds yet.</p>
           ) : (
             <table className="mt-3 w-full text-left">
-              <thead className="text-xs text-[var(--muted)]">
+              <thead className="eyebrow">
                 <tr>
                   <th className="py-1 font-medium">Persona</th>
                   <th className="py-1 text-right font-medium">Rounds</th>
@@ -147,18 +146,14 @@ export function StatsView() {
               </thead>
               <tbody>
                 {personas.map((p) => (
-                  <tr key={p.name} className="border-t border-[var(--border)]">
-                    <td className="py-1.5">
+                  <tr key={p.name} className="border-t border-border">
+                    <td className="py-2">
                       {p.name}
-                      {p.trickster && (
-                        <span className="ml-2 rounded-full bg-[var(--bubble-them)] px-2 py-0.5 text-xs">
-                          trickster
-                        </span>
-                      )}
+                      {p.trickster && <Badge className="ml-2">trickster</Badge>}
                     </td>
-                    <td className="py-1.5 text-right tabular-nums">{p.rounds}</td>
-                    <td className="py-1.5 text-right tabular-nums">{p.judged}</td>
-                    <td className="py-1.5 text-right tabular-nums">
+                    <td className="py-2 text-right font-mono tabular-nums">{p.rounds}</td>
+                    <td className="py-2 text-right font-mono tabular-nums">{p.judged}</td>
+                    <td className="py-2 text-right font-mono tabular-nums">
                       {p.judged ? pct(p.fooled / p.judged) : '–'}
                     </td>
                   </tr>
@@ -166,17 +161,17 @@ export function StatsView() {
               </tbody>
             </table>
           )}
-        </section>
+        </Panel>
       )}
-    </main>
+    </PageFrame>
   );
 }
 
 function Tile({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
-      <p className="text-xs text-[var(--muted)]">{label}</p>
-      <p className="mt-1 text-2xl font-black tabular-nums">{value}</p>
+    <div className="bg-card p-4">
+      <p className="eyebrow">{label}</p>
+      <p className="mt-2 font-mono text-2xl tabular-nums">{value}</p>
     </div>
   );
 }

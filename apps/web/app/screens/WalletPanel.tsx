@@ -12,6 +12,8 @@ import {
   wholeTokens,
   type WalletBalances,
 } from '@/lib/wallet';
+import { Button } from '@/components/ui/button';
+import { Panel } from '@/components/Panel';
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
@@ -66,24 +68,26 @@ export function WalletPanel({
 
   if (!tokensMode || !address) {
     return (
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 text-sm">
-        <p className="font-semibold">You're playing free as a guest.</p>
-        <p className="mt-1 text-[var(--muted)]">
+      <Panel className="p-5 text-sm">
+        <p className="eyebrow">Wallet</p>
+        <p className="mt-3 font-medium">You're playing free as a guest.</p>
+        <p className="mt-1 leading-relaxed text-muted-foreground">
           Sign in with a Base Account to stake free test tokens (tBON) on your calls. It uses a
           passkey, so there's nothing to install, and the game pays your gas.
         </p>
-        <button
+        <Button
+          variant="outline"
           onClick={() => {
             setBusy({ action: 'signIn', step: 'wallet' });
             void run(onSignIn);
           }}
           disabled={!!busy}
-          className="mt-4 w-full rounded-xl border border-[var(--border)] px-4 py-3 font-semibold hover:bg-[var(--bubble-them)] disabled:opacity-40"
+          className="mt-4 w-full"
         >
           {busy ? 'Waiting for your wallet…' : 'Sign in with Base Account'}
-        </button>
-        {error && <p className="mt-2 text-[var(--bot)]">{error}</p>}
-      </div>
+        </Button>
+        {error && <p className="mt-2 text-destructive">{error}</p>}
+      </Panel>
     );
   }
 
@@ -129,76 +133,78 @@ export function WalletPanel({
         : 'Sending to the chain…';
 
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 text-sm">
-      <div className="flex items-center justify-between">
-        <p className="font-semibold">
+    <Panel className="text-sm">
+      <div className="flex items-center justify-between border-b border-border px-5 py-3">
+        <p className="flex items-center gap-3">
+          <span className="eyebrow">Wallet</span>
           <a
             href={`${onchain.explorer}/address/${address}`}
             target="_blank"
             rel="noreferrer"
-            className="underline"
+            className="font-mono text-xs underline underline-offset-4 hover:text-brand"
           >
             {short(address)}
           </a>
         </p>
-        <button onClick={onSignOut} className="text-xs text-[var(--muted)] underline">
+        <Button variant="link" size="sm" onClick={onSignOut} className="min-h-0 py-0">
           Sign out
-        </button>
+        </Button>
       </div>
-      <dl className="mt-3 grid grid-cols-2 gap-2">
-        <div>
-          <dt className="text-xs text-[var(--muted)]">In the game</dt>
-          <dd className="text-lg font-bold">{inGame.toLocaleString()} tBON</dd>
+      <div className="p-5">
+        <dl className="grid grid-cols-2 gap-4">
+          <div>
+            <dt className="eyebrow">In the game</dt>
+            <dd className="mt-1 font-mono text-base sm:text-lg tabular-nums">
+              {inGame.toLocaleString()} tBON
+            </dd>
+          </div>
+          <div>
+            <dt className="eyebrow">Session</dt>
+            <dd className="mt-1 font-mono text-base sm:text-lg">
+              {sessionOk ? `until ${new Date(sessionEndsAt).toLocaleDateString()}` : 'not started'}
+            </dd>
+          </div>
+        </dl>
+        {inWallet > 0 && (
+          <p className="mt-2 font-mono text-[11px] text-muted-foreground">
+            {inWallet.toLocaleString()} tBON withdrawn to your wallet.
+          </p>
+        )}
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          {canTopUp && (
+            <Button onClick={() => void topUp()} disabled={!!busy} className="min-h-10 flex-1">
+              {label('topUp', topUpLabel)}
+            </Button>
+          )}
+          {inGame > 0 && balances && (
+            <Button
+              variant="outline"
+              onClick={() => void withdraw()}
+              disabled={!!busy}
+              className="min-h-10"
+            >
+              {label('withdraw', 'Withdraw all')}
+            </Button>
+          )}
         </div>
-        <div>
-          <dt className="text-xs text-[var(--muted)]">Session</dt>
-          <dd className="text-lg font-bold">
-            {sessionOk ? `until ${new Date(sessionEndsAt).toLocaleDateString()}` : 'not started'}
-          </dd>
-        </div>
-      </dl>
-      {inWallet > 0 && (
-        <p className="mt-1 text-xs text-[var(--muted)]">
-          {inWallet.toLocaleString()} tBON withdrawn to your wallet.
+        {inGame < STAKE_POINTS && !faucetReady && balances && (
+          <p className="mt-2 font-mono text-[11px] text-muted-foreground">
+            The free tBON faucet opens again{' '}
+            {new Date(balances.faucetReadyAt).toLocaleString(undefined, {
+              weekday: 'short',
+              hour: 'numeric',
+              minute: '2-digit',
+            })}
+            .
+          </p>
+        )}
+        {error && <p className="mt-2 text-destructive">{error}</p>}
+        <p className="mt-4 font-mono text-[11px] leading-relaxed text-muted-foreground">
+          Base Sepolia testnet. tBON is a test token with no value. Your wallet only signs; the game
+          pays the gas.
         </p>
-      )}
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-        {canTopUp && (
-          <button
-            onClick={() => void topUp()}
-            disabled={!!busy}
-            className="flex-1 rounded-xl bg-[var(--fg)] px-4 py-3 font-semibold text-[var(--bg)] hover:opacity-90 disabled:opacity-40"
-          >
-            {label('topUp', topUpLabel)}
-          </button>
-        )}
-        {inGame > 0 && balances && (
-          <button
-            onClick={() => void withdraw()}
-            disabled={!!busy}
-            className="rounded-xl border border-[var(--border)] px-4 py-3 font-semibold hover:bg-[var(--bubble-them)] disabled:opacity-40"
-          >
-            {label('withdraw', 'Withdraw all')}
-          </button>
-        )}
       </div>
-      {inGame < STAKE_POINTS && !faucetReady && balances && (
-        <p className="mt-2 text-xs text-[var(--muted)]">
-          The free tBON faucet opens again{' '}
-          {new Date(balances.faucetReadyAt).toLocaleString(undefined, {
-            weekday: 'short',
-            hour: 'numeric',
-            minute: '2-digit',
-          })}
-          .
-        </p>
-      )}
-      {error && <p className="mt-2 text-[var(--bot)]">{error}</p>}
-      <p className="mt-3 text-xs text-[var(--muted)]">
-        Base Sepolia testnet. tBON is a test token with no value. Your wallet only signs; the game
-        pays the gas.
-      </p>
-    </div>
+    </Panel>
   );
 }
 

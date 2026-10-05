@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { useGame } from '@/lib/useGame';
+import { cn } from '@/lib/utils';
+import { PageFrame, SiteHeader } from '@/components/Brand';
 import { Lobby } from './screens/Lobby';
 import { Waiting } from './screens/Waiting';
 import { Chat } from './screens/Chat';
@@ -12,39 +14,45 @@ import { SettlementCard } from './screens/SettlementCard';
 import { WalletPanel } from './screens/WalletPanel';
 import { InviteOnly } from './screens/InviteOnly';
 
+const chip =
+  'rounded-sm border border-border px-2 py-1 font-mono text-[11px] whitespace-nowrap text-foreground';
+
 export function Game() {
   const { state, actions, address } = useGame();
   const mode = state.welcome?.mode;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col px-4 py-6 sm:py-10">
-      <header className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-black tracking-tight">
-          BOT <span className="text-[var(--muted)]">or</span> NOT
-        </h1>
-        <div className="flex items-center gap-4 text-xs text-[var(--muted)]">
-          <Link href="/stats" className="underline">
-            Stats
-          </Link>
-          {mode === 'free' ? (
-            <span className="rounded-full border border-[var(--border)] px-3 py-1 font-semibold text-[var(--fg)]">
-              Free play
+    <PageFrame>
+      <SiteHeader>
+        <Link href="/stats" className="eyebrow transition-colors hover:text-foreground">
+          Stats
+        </Link>
+        {mode === 'free' ? (
+          <span className={chip}>Free play</span>
+        ) : (
+          state.points !== undefined && (
+            <span className={cn(chip, 'tabular-nums')}>
+              {state.points.toLocaleString()} {mode === 'tokens' ? 'tBON' : 'pts'}
             </span>
-          ) : (
-            state.points !== undefined && (
-              <span className="rounded-full border border-[var(--border)] px-3 py-1 font-semibold text-[var(--fg)]">
-                {state.points.toLocaleString()} {mode === 'tokens' ? 'tBON' : 'pts'}
-              </span>
-            )
-          )}
-          <span className="flex items-center gap-2" aria-live="polite">
-            <span
-              className={`h-2 w-2 rounded-full ${state.welcome ? 'bg-green-500' : 'bg-red-500'}`}
-            />
+          )
+        )}
+        <span className="eyebrow flex items-center gap-2" aria-live="polite">
+          <span
+            className={cn(
+              'size-1.5',
+              state.welcome
+                ? 'bg-brand'
+                : state.inviteRequired
+                  ? 'bg-muted-foreground'
+                  : 'bg-destructive',
+            )}
+          />
+          {/* Just the square on small screens; screen readers still hear the status. */}
+          <span className="sr-only sm:not-sr-only">
             {state.welcome ? 'Connected' : state.inviteRequired ? 'Invite only' : 'Connecting…'}
           </span>
-        </div>
-      </header>
+        </span>
+      </SiteHeader>
 
       {state.inviteRequired && <InviteOnly />}
 
@@ -77,6 +85,6 @@ export function Game() {
         <Result state={state} address={address} onAgain={actions.backToLobby} />
       )}
       {state.screen === 'void' && <Void reason={state.voidReason} onBack={actions.backToLobby} />}
-    </main>
+    </PageFrame>
   );
 }

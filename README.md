@@ -66,6 +66,10 @@ Players' wallets only ever sign messages; the server sends the transactions. (Co
 
 `.env` files are git-ignored. **Never commit keys**: this repository is public.
 
+## Design
+
+The web app follows Geist's dark, monochrome style with one cyan accent. Colours are named tokens in `apps/web/app/globals.css` (shadcn/ui names plus `brand`, `surface-raised` and `border-strong`), so components never hard-code colours. Fonts come from the `geist` package: Geist Sans for text, Geist Mono for numbers, labels and hashes, and Geist Pixel only for the wordmark, the BOT and NOT buttons and the reveal. Shared pieces live in `apps/web/components` (`ui/` holds the shadcn/ui primitives; `npx shadcn add` works with `components.json`).
+
 ## Hosting
 
 The web app goes on Vercel and the game server on Railway (any Docker host works):

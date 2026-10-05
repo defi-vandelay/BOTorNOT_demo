@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import { MAX_MESSAGE_CHARS, TURN_MS } from '@botornot/shared';
 import { TYPING_VISIBLE_MS, type GameState } from '@/lib/game';
 import { clock, secondsLeft, useNow } from '@/lib/useNow';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 export function Chat({
   state,
@@ -42,41 +45,42 @@ export function Chat({
   };
 
   return (
-    <section className="flex h-[calc(100dvh-7rem)] min-h-[420px] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
-      <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3 text-sm">
-        <span className="font-semibold">Stranger</span>
-        <span className="font-mono tabular-nums text-[var(--muted)]">
-          {clock(secondsLeft(state.chatEndsAt, now))} left
+    <section className="flex h-[calc(100dvh-8.5rem)] min-h-[420px] flex-col overflow-hidden rounded-md border border-border bg-card">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <span className="eyebrow">Stranger</span>
+        <span className="font-mono text-xs text-muted-foreground tabular-nums">
+          <span className="text-foreground">{clock(secondsLeft(state.chatEndsAt, now))}</span> left
         </span>
       </div>
 
       <div ref={listRef} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-4">
         {state.lines.length === 0 && (
-          <p className="m-auto text-center text-sm text-[var(--muted)]">
+          <p className="m-auto text-center text-sm text-muted-foreground">
             {yours ? 'You go first. Say hi.' : 'They go first…'}
           </p>
         )}
         {state.lines.map((line, i) => (
           <p
             key={i}
-            className={`max-w-[80%] rounded-2xl px-4 py-2 break-words ${
+            className={cn(
+              'max-w-[80%] rounded-md px-3.5 py-2 text-[15px] leading-snug break-words',
               line.from === 'you'
-                ? 'self-end rounded-br-md bg-[var(--bubble-you)] text-[var(--bubble-you-fg)]'
-                : 'self-start rounded-bl-md bg-[var(--bubble-them)]'
-            }`}
+                ? 'self-end bg-primary text-primary-foreground'
+                : 'self-start border border-border bg-surface-raised',
+            )}
           >
             {line.text}
           </p>
         ))}
         {partnerTyping && (
           <p
-            className="flex gap-1 self-start rounded-2xl rounded-bl-md bg-[var(--bubble-them)] px-4 py-3"
+            className="flex gap-1 self-start rounded-md border border-border bg-surface-raised px-3.5 py-3"
             aria-label="typing"
           >
             {[0, 1, 2].map((i) => (
               <span
                 key={i}
-                className="typing-dot h-2 w-2 rounded-full bg-[var(--muted)]"
+                className="typing-dot size-1.5 bg-muted-foreground"
                 style={{ animationDelay: `${i * 0.2}s` }}
               />
             ))}
@@ -84,16 +88,16 @@ export function Chat({
         )}
       </div>
 
-      <div className="h-1 bg-[var(--bubble-them)]">
+      <div className="h-0.5 bg-border">
         <div
-          className="h-full bg-[var(--accent)] transition-[width] duration-200 ease-linear"
+          className="h-full bg-brand transition-[width] duration-200 ease-linear"
           style={{ width: yours ? `${(turnLeftMs / TURN_MS) * 100}%` : '0%' }}
         />
       </div>
 
       <form onSubmit={submit} className="flex items-center gap-2 p-3">
         <div className="relative flex-1">
-          <input
+          <Input
             ref={inputRef}
             value={draft}
             maxLength={MAX_MESSAGE_CHARS}
@@ -103,19 +107,15 @@ export function Chat({
               onTyping();
             }}
             placeholder={yours ? `Your turn · ${Math.ceil(turnLeftMs / 1000)}s` : 'Their turn…'}
-            className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3 pr-14 outline-none focus:border-[var(--accent)] disabled:opacity-60"
+            className="h-11 pr-12"
           />
-          <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-xs tabular-nums text-[var(--muted)]">
+          <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 font-mono text-xs text-muted-foreground tabular-nums">
             {MAX_MESSAGE_CHARS - draft.length}
           </span>
         </div>
-        <button
-          type="submit"
-          disabled={!yours || !draft.trim()}
-          className="rounded-xl bg-[var(--accent)] px-4 py-3 font-semibold text-[var(--accent-fg)] disabled:opacity-40"
-        >
+        <Button type="submit" disabled={!yours || !draft.trim()} className="h-11">
           Send
-        </button>
+        </Button>
       </form>
     </section>
   );
