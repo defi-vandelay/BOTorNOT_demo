@@ -1,47 +1,101 @@
 @import 'tailwindcss';
 
+/*
+ * BOT or NOT design tokens. Geist's dark monochrome is the base; cyan is the one brand accent and
+ * is kept for the brand mark, the main action on a screen and live state. Names follow shadcn/ui,
+ * so its primitives pick them up, plus a few of our own (surface-raised, border-strong, brand).
+ * Dark only for now: a light theme would redefine these variables.
+ */
 :root {
-  --bg: #f6f5f1;
-  --card: #ffffff;
-  --border: #e3e1da;
-  --fg: #17171c;
-  --muted: #6b6b76;
-  --accent: #4f46e5;
-  --accent-fg: #ffffff;
-  --bubble-you: #4f46e5;
-  --bubble-you-fg: #ffffff;
-  --bubble-them: #ebe9e3;
-  --bot: #e5484d;
-  --human: #12a594;
+  color-scheme: dark;
+  --radius: 6px;
+
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --card: #111111;
+  --card-foreground: #ededed;
+  --surface-raised: #1a1a1a;
+  --primary: #ededed;
+  --primary-foreground: #0a0a0a;
+  --secondary: #1a1a1a;
+  --secondary-foreground: #ededed;
+  --muted: #1a1a1a;
+  --muted-foreground: #a1a1a1;
+  --accent: #1f1f1f;
+  --accent-foreground: #ededed;
+  --destructive: #ff6166;
+  --border: #262626;
+  --border-strong: #3d3d3d;
+  --input: #333333;
+  --ring: #1fd5f9;
+
+  --brand: #1fd5f9;
+  --brand-foreground: #031317;
+
+  --grid-dot: rgb(255 255 255 / 0.07);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #101014;
-    --card: #18181e;
-    --border: #2a2a33;
-    --fg: #ededf0;
-    --muted: #9a9aa6;
-    --accent: #8b85ff;
-    --accent-fg: #101014;
-    --bubble-you: #6e66ff;
-    --bubble-you-fg: #ffffff;
-    --bubble-them: #26262e;
-    --bot: #ff6369;
-    --human: #3dd6c0;
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-surface-raised: var(--surface-raised);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Branded moments only: the wordmark, the BOT and NOT buttons, the reveal. */
+  --font-pixel: var(--font-geist-pixel-square), var(--font-geist-mono), ui-monospace, monospace;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--brand) 35%, transparent);
   }
 }
 
-body {
-  background: var(--bg);
-  color: var(--fg);
+@utility dot-grid {
+  background-image: radial-gradient(var(--grid-dot) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+@utility eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
 }
 
 @keyframes blink {
   0%,
   80%,
   100% {
-    opacity: 0.25;
+    opacity: 0.2;
   }
   40% {
     opacity: 1;
@@ -50,4 +104,15 @@ body {
 
 .typing-dot {
   animation: blink 1.2s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typing-dot {
+    animation: none;
+    opacity: 0.6;
+  }
+  * {
+    transition-duration: 0ms !important;
+    scroll-behavior: auto !important;
+  }
 }
