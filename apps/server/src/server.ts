@@ -4,6 +4,7 @@ import { formatEther } from 'viem';
 import { WebSocketServer, type WebSocket } from 'ws';
 import {
   SIGN_IN_TTL_MS,
+  betaLoginText,
   parseClientMessage,
   signInMessage,
   type ClientMessage,
@@ -48,7 +49,7 @@ function clientIp(req: IncomingMessage): string {
   return last?.trim() || req.socket.remoteAddress || 'unknown';
 }
 
-/** Compares an invite code without leaking how much of it matched. */
+/** Compares an invite code or login without leaking how much of it matched. */
 function sameCode(given: string | undefined, expected: string): boolean {
   const digest = (v: string) => createHash('sha256').update(v).digest();
   return given !== undefined && timingSafeEqual(digest(given), digest(expected));
@@ -63,6 +64,18 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
   const commit = new CommitService(operator, config.CHAIN_ID, config.GAME_VAULT_ADDRESS);
   const store = new Store(config.DB_PATH);
   const stats = new Stats(store);
+  // What hello.login must be for the beta username and password (see betaLoginKey).
+  const loginKey =
+    config.BETA_USERNAME && config.BETA_PASSWORD
+      ? createHash('sha256')
+          .update(betaLoginText(config.BETA_USERNAME, config.BETA_PASSWORD))
+          .digest('hex')
+      : undefined;
+  /** An open server lets everyone in; a private one wants the invite code or the login. */
+  const letIn = (msg: Extract<ClientMessage, { type: 'hello' }>) =>
+    (!config.INVITE_CODE && !loginKey) ||
+    (!!config.INVITE_CODE && sameCode(msg.invite, config.INVITE_CODE)) ||
+    (!!loginKey && sameCode(msg.login, loginKey));
   const players = new Set<Player>();
   // A hosted game caps daily rounds and wallet actions; dev mode (one machine) doesn't.
   const limits = config.DEV_MODE
@@ -226,9 +239,14 @@ export function startServer(config: Config, deps: ServerDeps): GameServer {
     const hello = async (msg: Extract<ClientMessage, { type: 'hello' }>) => {
       if (greeting) return;
       greeting = true;
-      if (config.INVITE_CODE && !sameCode(msg.invite, config.INVITE_CODE)) {
-        log(`turned away ${clientIp(req)}: no valid invite`);
-        send({ type: 'invite.required' });
+      if (!letIn(msg)) {
+        const failed = !!loginKey && !!msg.login;
+        log(`turned away ${clientIp(req)}: ${failed ? 'wrong login' : 'no valid invite'}`);
+        send({
+          type: 'invite.required',
+          ...(loginKey && { login: true }),
+          ...(failed && { failed: true }),
+        });
         ws.close(1008, 'invite required');
         return;
       }

@@ -49,12 +49,14 @@ export function Game() {
           />
           {/* Just the square on small screens; screen readers still hear the status. */}
           <span className="sr-only sm:not-sr-only">
-            {state.welcome ? 'Connected' : state.inviteRequired ? 'Invite only' : 'Connecting…'}
+            {state.welcome ? 'Connected' : state.inviteRequired ? 'Private beta' : 'Connecting…'}
           </span>
         </span>
       </SiteHeader>
 
-      {state.inviteRequired && <InviteOnly />}
+      {state.inviteRequired && (
+        <InviteOnly loginOffered={state.loginOffered} login={state.login} onLogIn={actions.logIn} />
+      )}
 
       {state.settlement && (state.screen === 'lobby' || state.screen === 'result') && (
         <SettlementCard

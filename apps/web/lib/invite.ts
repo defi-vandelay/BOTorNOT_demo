@@ -25,3 +25,26 @@ export function inviteCode(): string | undefined {
     return undefined;
   }
 }
+
+const LOGIN_KEY = 'botornot.login';
+let loginThisPage: string | undefined;
+
+/** The beta login this browser signed in with (betaLoginKey's hash, never the password). */
+export function savedLogin(): string | undefined {
+  if (loginThisPage) return loginThisPage;
+  try {
+    return localStorage.getItem(LOGIN_KEY) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function saveLogin(key: string | undefined): void {
+  loginThisPage = key;
+  try {
+    if (key) localStorage.setItem(LOGIN_KEY, key);
+    else localStorage.removeItem(LOGIN_KEY);
+  } catch {
+    // Storage blocked: the login still works until the page is closed.
+  }
+}

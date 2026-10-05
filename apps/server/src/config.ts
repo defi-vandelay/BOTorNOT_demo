@@ -37,6 +37,12 @@ const schema = z.object({
     .regex(/^[A-Za-z0-9_-]{6,100}$/, 'must be 6 to 100 letters, digits, - or _')
     .optional(),
   /**
+   * Beta login: a shared username and password that let players in instead of an invite link.
+   * A soft gate for the testnet phase, not real accounts. Set both or neither.
+   */
+  BETA_USERNAME: z.string().max(100).optional(),
+  BETA_PASSWORD: z.string().max(200).optional(),
+  /**
    * Daily limits that keep a hosted game's costs bounded (0 = no limit). They reset at midnight
    * UTC and are off in dev mode.
    */
@@ -69,6 +75,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new Error('DEV_MODE=true is not allowed when NODE_ENV=production');
   }
   const devMode = parsed.DEV_MODE === undefined ? !production : parsed.DEV_MODE === 'true';
+  if (!parsed.BETA_USERNAME !== !parsed.BETA_PASSWORD) {
+    throw new Error('set both BETA_USERNAME and BETA_PASSWORD, or neither');
+  }
   const onchain = !/^0x0{40}$/.test(parsed.GAME_VAULT_ADDRESS);
   if (onchain && !parsed.OPERATOR_PRIVATE_KEY) {
     throw new Error('GAME_VAULT_ADDRESS needs OPERATOR_PRIVATE_KEY (the key that deployed it)');

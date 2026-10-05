@@ -1,7 +1,9 @@
+import { createHash } from 'node:crypto';
 import WebSocket from 'ws';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import {
   MAX_MESSAGE_CHARS,
+  betaLoginText,
   parseServerMessage,
   type Call,
   type ClientMessage,
@@ -96,6 +98,7 @@ export class SimPlayer {
         type: 'hello',
         address: this.address,
         invite: process.env.INVITE_CODE || undefined,
+        login: simLogin(),
       });
       void this.requeue(0);
     });
@@ -223,4 +226,11 @@ export class SimPlayer {
     }
     this.send({ type: 'call.submit', call });
   }
+}
+
+/** The beta login from .env, for a private server without an invite code. */
+function simLogin(): string | undefined {
+  const { BETA_USERNAME: username, BETA_PASSWORD: password } = process.env;
+  if (!username || !password) return undefined;
+  return createHash('sha256').update(betaLoginText(username, password)).digest('hex');
 }

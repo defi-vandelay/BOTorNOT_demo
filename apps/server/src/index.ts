@@ -12,8 +12,14 @@ server.http.once('listening', () => {
   if (!config.OPERATOR_PRIVATE_KEY) {
     console.log('No OPERATOR_PRIVATE_KEY set: using a throwaway signing key for this run.');
   }
-  if (config.INVITE_CODE) console.log('Invite-only: players need the invite link.');
-  else if (!config.DEV_MODE) console.log('No INVITE_CODE set: anyone with the address can play.');
+  const ways = [
+    config.INVITE_CODE && 'the invite link',
+    config.BETA_USERNAME && 'the beta username and password',
+  ].filter(Boolean);
+  if (ways.length) console.log(`Private: players need ${ways.join(' or ')}.`);
+  else if (!config.DEV_MODE) {
+    console.log('No INVITE_CODE or BETA_USERNAME set: anyone with the address can play.');
+  }
   if (!config.DEV_MODE) {
     console.log(
       `Daily limits: ${config.ROUNDS_PER_PLAYER_PER_DAY} rounds per player, ` +

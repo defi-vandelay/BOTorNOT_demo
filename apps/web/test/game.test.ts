@@ -44,6 +44,32 @@ describe('game reducer', () => {
       { type: 'connected', connected: false },
     );
     expect(state.inviteRequired).toBe(true);
+    expect(state.loginOffered).toBe(false);
+  });
+
+  it('tracks a beta sign-in until the server lets the player in', () => {
+    const welcome = {
+      type: 'welcome',
+      playerId: 'p1',
+      operator: `0x${'aa'.repeat(20)}`,
+      chainId: 84532,
+      verifyingContract: `0x${'00'.repeat(20)}`,
+      mode: 'points',
+    } as const;
+    const refused = play(
+      { type: 'server', now: 0, msg: { type: 'invite.required', login: true } },
+      { type: 'logging-in' },
+      { type: 'server', now: 1, msg: { type: 'invite.required', login: true, failed: true } },
+    );
+    expect([refused.inviteRequired, refused.loginOffered, refused.login]).toEqual([
+      true,
+      true,
+      'failed',
+    ]);
+    const pending = reduce(refused, { type: 'logging-in' });
+    expect(pending.login).toBe('pending');
+    const inside = reduce(pending, { type: 'server', now: 2, msg: welcome });
+    expect([inside.inviteRequired, inside.login]).toEqual([undefined, undefined]);
   });
 
   it('keeps the connection details when going back to the lobby', () => {

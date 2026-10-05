@@ -74,10 +74,10 @@ The web app follows Geist's dark, monochrome style with one cyan accent. Colours
 
 The web app goes on Vercel and the game server on Railway (any Docker host works):
 
-- **Server:** `railway.json` builds `apps/server/Dockerfile` from the repo root and checks `/health`. Mount a volume at `/data` so the SQLite database survives redeploys (the image sets `DB_PATH=/data/botornot.db`). Set the variables from `apps/server/.env.example`, at least `WEB_ORIGIN` (the web app's address), `ANTHROPIC_API_KEY`, `OPERATOR_PRIVATE_KEY`, `GAME_VAULT_ADDRESS` and `INVITE_CODE`. The image runs with `NODE_ENV=production`, so dev mode is off.
+- **Server:** `railway.json` builds `apps/server/Dockerfile` from the repo root and checks `/health`. Mount a volume at `/data` so the SQLite database survives redeploys (the image sets `DB_PATH=/data/botornot.db`). Set the variables from `apps/server/.env.example`, at least `WEB_ORIGIN` (the web app's address), `ANTHROPIC_API_KEY`, `OPERATOR_PRIVATE_KEY`, `GAME_VAULT_ADDRESS` and `INVITE_CODE` and/or `BETA_USERNAME` with `BETA_PASSWORD`. The image runs with `NODE_ENV=production`, so dev mode is off.
 - **Web:** a Vercel project with root directory `apps/web` and `NEXT_PUBLIC_SERVER_WS_URL=wss://<server address>/ws`.
 
-**Invite-only:** with `INVITE_CODE` set, only players who opened `https://<web address>/?invite=<code>` can play (the browser remembers the code). Others see an invite-only page.
+**Private beta:** with `INVITE_CODE` set, only players who opened `https://<web address>/?invite=<code>` can play (the browser remembers the code). With `BETA_USERNAME` and `BETA_PASSWORD` set, players can sign in with those instead: the page shows a sign-in form, and the browser keeps a hash of the login, not the password. The username ignores case. Either works when both are set; with neither, anyone can play.
 
 **Daily limits** (off in dev mode, reset at midnight UTC, `0` turns one off): `ROUNDS_PER_PLAYER_PER_DAY` (default 40, counted per wallet or guest and per IP), `BOT_ROUNDS_PER_DAY` across everyone (default 400; when it's used up nobody can queue, so a partner can't be inferred to be human) and `WALLET_ACTIONS_PER_DAY` per wallet (default 10, since the operator pays their gas). The server logs a warning when the operator's ETH falls below `OPERATOR_LOW_ETH`, and `/health` shows its balance.
 

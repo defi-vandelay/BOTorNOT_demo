@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { parseServerMessage, type Call, type ClientMessage } from '@botornot/shared';
+import { betaLoginKey, parseServerMessage, type Call, type ClientMessage } from '@botornot/shared';
 import type { Address } from 'viem';
 import { guestAccount } from './guest';
-import { inviteCode } from './invite';
+import { inviteCode, saveLogin, savedLogin } from './invite';
 import { initialState, reduce } from './game';
 import { savedSignIn, signIn, signOut, type WalletSignIn } from './wallet';
 
@@ -18,8 +18,10 @@ export function useGame() {
   const lastTypingRef = useRef(0);
   // The signed top-up or withdrawal waiting for the server's wallet.result.
   const pendingRef = useRef<{ resolve: () => void; reject: (err: Error) => void } | null>(null);
-  // Turned away for want of an invite: retrying won't help until the page is reopened with one.
+  // Turned away for want of an invite or login: retrying won't help until there is one.
   const deniedRef = useRef(false);
+  // Connects again straight away, after the player signs in with the beta login.
+  const reconnectRef = useRef<(() => void) | null>(null);
   // Created after mount: keys live in browser storage, which doesn't exist during server render.
   // A wallet sign-in (on-chain mode) takes over from the per-tab guest key.
   const [guest, setGuest] = useState<ReturnType<typeof guestAccount> | null>(null);
@@ -46,12 +48,23 @@ export function useGame() {
         const auth = wallet
           ? { issuedAt: wallet.issuedAt, signature: wallet.signature }
           : undefined;
-        ws.send(JSON.stringify({ type: 'hello', address, auth, invite: inviteCode() }));
+        ws.send(
+          JSON.stringify({
+            type: 'hello',
+            address,
+            auth,
+            invite: inviteCode(),
+            login: savedLogin(),
+          }),
+        );
       };
       ws.onmessage = (event) => {
         const msg = parseServerMessage(String(event.data));
         if (!msg) return;
-        if (msg.type === 'invite.required') deniedRef.current = true;
+        if (msg.type === 'invite.required') {
+          deniedRef.current = true;
+          if (msg.failed) saveLogin(undefined);
+        }
         if (msg.type === 'wallet.result') {
           const pending = pendingRef.current;
           pendingRef.current = null;
@@ -68,8 +81,14 @@ export function useGame() {
       };
     };
     connect();
+    reconnectRef.current = () => {
+      deniedRef.current = false;
+      clearTimeout(retry);
+      connect();
+    };
     return () => {
       closed = true;
+      reconnectRef.current = null;
       clearTimeout(retry);
       wsRef.current?.close();
     };
@@ -116,6 +135,13 @@ export function useGame() {
       signOut() {
         signOut();
         setWallet(null);
+      },
+      /** Signs in to a private server with the beta username and password. */
+      async logIn(username: string, password: string) {
+        const key = await betaLoginKey(username, password);
+        dispatch({ type: 'logging-in' });
+        saveLogin(key);
+        reconnectRef.current?.();
       },
       /** Sends a signed top-up or withdrawal; resolves once the server has put it on-chain. */
       wallet(msg: Extract<ClientMessage, { type: 'wallet.topUp' | 'wallet.withdraw' }>) {
