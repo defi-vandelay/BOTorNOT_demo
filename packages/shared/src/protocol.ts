@@ -20,6 +20,11 @@ export const clientMessage = z.discriminatedUnion('type', [
     auth: z.object({ issuedAt: z.number().int(), signature: hex }).optional(),
     /** The code from the player's invite link, when the server is invite-only. */
     invite: z.string().max(200).optional(),
+    /** The beta username and password, as betaLoginKey() hashes them (instead of an invite). */
+    login: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .optional(),
   }),
   /**
    * A wallet player tops up without sending a transaction: the server claims the test-token
@@ -141,8 +146,15 @@ export const serverMessage = z.discriminatedUnion('type', [
     message: z.string().optional(),
     txHash: hex.optional(),
   }),
-  /** The server is invite-only and this hello had no valid invite; the connection then closes. */
-  z.object({ type: z.literal('invite.required') }),
+  /**
+   * The server is private and this hello had no valid invite or login; the connection then
+   * closes. `login`: a username and password are accepted too. `failed`: the login given was wrong.
+   */
+  z.object({
+    type: z.literal('invite.required'),
+    login: z.boolean().optional(),
+    failed: z.boolean().optional(),
+  }),
   z.object({ type: z.literal('error'), message: z.string() }),
 ]);
 export type ServerMessage = z.infer<typeof serverMessage>;

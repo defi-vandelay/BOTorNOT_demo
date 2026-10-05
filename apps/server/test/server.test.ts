@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import type { AddressInfo } from 'node:net';
-import { STARTING_POINTS } from '@botornot/shared';
+import { STARTING_POINTS, betaLoginKey } from '@botornot/shared';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -101,6 +101,38 @@ describe('invite-only', () => {
     const invited = await connect(port, { invite: 'letmein-123' });
     await expect.poll(() => invited.messages[0]?.type).toBe('welcome');
     invited.ws.close();
+  });
+
+  it('lets a player in with the beta username and password instead', async () => {
+    const logs: string[] = [];
+    const port = await start(
+      { INVITE_CODE: 'letmein-123', BETA_USERNAME: 'tester', BETA_PASSWORD: 'Secret-1' },
+      (msg) => logs.push(msg),
+    );
+
+    const stranger = await connect(port);
+    await expect.poll(() => stranger.closed()).toBe(true);
+    expect(stranger.messages).toEqual([{ type: 'invite.required', login: true }]);
+
+    const wrong = await connect(port, { login: await betaLoginKey('tester', 'secret-1') });
+    await expect.poll(() => wrong.closed()).toBe(true);
+    expect(wrong.messages).toEqual([{ type: 'invite.required', login: true, failed: true }]);
+    expect(logs.some((l) => l.endsWith(': wrong login'))).toBe(true);
+
+    const member = await connect(port, { login: await betaLoginKey('Tester', 'Secret-1') });
+    await expect.poll(() => member.messages[0]?.type).toBe('welcome');
+    member.ws.close();
+
+    const invited = await connect(port, { invite: 'letmein-123' });
+    await expect.poll(() => invited.messages[0]?.type).toBe('welcome');
+    invited.ws.close();
+  });
+
+  it('needs only the login when there is no invite code', async () => {
+    const port = await start({ BETA_USERNAME: 'tester', BETA_PASSWORD: 'Secret-1' });
+    const stranger = await connect(port, { invite: 'anything-at-all' });
+    await expect.poll(() => stranger.closed()).toBe(true);
+    expect(stranger.messages).toEqual([{ type: 'invite.required', login: true }]);
   });
 });
 

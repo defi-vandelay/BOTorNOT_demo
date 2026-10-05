@@ -41,6 +41,14 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ INVITE_CODE: 'has spaces in it' })).toThrow(/INVITE_CODE/);
   });
 
+  it('takes a beta username and password only as a pair', () => {
+    const both = loadConfig({ BETA_USERNAME: 'tester', BETA_PASSWORD: 'Secret-1' });
+    expect([both.BETA_USERNAME, both.BETA_PASSWORD]).toEqual(['tester', 'Secret-1']);
+    expect(loadConfig({ BETA_USERNAME: '', BETA_PASSWORD: '' }).BETA_USERNAME).toBeUndefined();
+    expect(() => loadConfig({ BETA_USERNAME: 'tester' })).toThrow(/BETA_PASSWORD/);
+    expect(() => loadConfig({ BETA_PASSWORD: 'Secret-1' })).toThrow(/BETA_USERNAME/);
+  });
+
   it('has daily limits by default, and 0 turns one off', () => {
     const config = loadConfig({ BOT_ROUNDS_PER_DAY: '0' });
     expect(config.ROUNDS_PER_PLAYER_PER_DAY).toBe(40);

@@ -35,13 +35,18 @@ export interface GameState {
   settleTx?: `0x${string}`;
   /** The latest payout pool this player had calls in, until dismissed. */
   settlement?: Settlement;
-  /** The server is invite-only and this browser has no valid invite. */
+  /** The server is private and this browser has no valid invite or login. */
   inviteRequired?: boolean;
+  /** The private server also takes the beta username and password. */
+  loginOffered?: boolean;
+  /** Beta sign-in: waiting to hear back, or the server said the login was wrong. */
+  login?: 'pending' | 'failed';
 }
 
 export type Action =
   | { type: 'server'; msg: ServerMessage; now: number }
   | { type: 'connected'; connected: boolean }
+  | { type: 'logging-in' }
   | { type: 'queued' }
   | { type: 'left-queue' }
   | { type: 'called'; call: Call }
@@ -58,6 +63,8 @@ export function reduce(state: GameState, action: Action): GameState {
       return action.connected
         ? { ...state, connected: true }
         : { ...state, connected: false, welcome: undefined };
+    case 'logging-in':
+      return { ...state, login: 'pending' };
     case 'identity':
       // A different player now: nothing from the last one carries over.
       return { ...initialState, connected: state.connected };
@@ -79,7 +86,7 @@ export function reduce(state: GameState, action: Action): GameState {
 function onServer(state: GameState, msg: ServerMessage, now: number): GameState {
   switch (msg.type) {
     case 'welcome':
-      return { ...state, welcome: msg };
+      return { ...state, welcome: msg, inviteRequired: undefined, login: undefined };
     case 'queue.waiting':
       return { ...state, screen: 'waiting' };
     case 'match.found':
@@ -117,7 +124,12 @@ function onServer(state: GameState, msg: ServerMessage, now: number): GameState 
       // Answers a request useGame is waiting on.
       return state;
     case 'invite.required':
-      return { ...state, inviteRequired: true };
+      return {
+        ...state,
+        inviteRequired: true,
+        loginOffered: !!msg.login,
+        login: msg.failed ? 'failed' : undefined,
+      };
     case 'error':
       // Turned away from the queue: back to the lobby, where the message is shown.
       if (state.screen === 'waiting') return { ...state, screen: 'lobby', error: msg.message };
