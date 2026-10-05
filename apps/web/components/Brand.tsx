@@ -15,7 +15,7 @@ export function Wordmark({ className }: { className?: string }) {
 /** The top bar shared by every page: wordmark on the left, the page's own items on the right. */
 export function SiteHeader({ children, page }: { children?: React.ReactNode; page?: string }) {
   return (
-    <header className="-mx-4 mb-8 flex h-14 items-center justify-between gap-4 border-b border-border px-4 sm:-mx-8 sm:px-8">
+    <header className="-mx-4 mb-8 flex h-14 items-center justify-between gap-4 border-b border-border px-4 sm:-mx-8 sm:px-8 lg:-mx-12 lg:mb-10 lg:h-16 lg:px-12">
       <h1 className="flex items-center gap-3">
         <Wordmark />
         {page && <span className="eyebrow">/ {page}</span>}
@@ -25,7 +25,10 @@ export function SiteHeader({ children, page }: { children?: React.ReactNode; pag
   );
 }
 
-/** The centred column with ruled edges that every page sits in. */
+/**
+ * The centred column with ruled edges that every page sits in: phone width on small screens,
+ * wide enough on a desktop for screens to lay out side by side.
+ */
 export function PageFrame({
   className,
   children,
@@ -36,7 +39,7 @@ export function PageFrame({
   return (
     <main
       className={cn(
-        'mx-auto flex min-h-screen w-full max-w-xl flex-col bg-background px-4 pb-10 sm:border-x sm:border-border sm:px-8',
+        'mx-auto flex min-h-screen w-full max-w-xl flex-col bg-background px-4 pb-10 sm:border-x sm:border-border sm:px-8 md:max-w-3xl lg:max-w-6xl lg:px-12',
         className,
       )}
     >

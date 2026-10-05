@@ -87,7 +87,7 @@ export function StatsView() {
   );
 
   return (
-    <PageFrame className="max-w-2xl gap-6">
+    <PageFrame className="gap-6">
       <SiteHeader page="stats">
         <Link href="/" className="eyebrow transition-colors hover:text-foreground">
           Play
@@ -113,64 +113,67 @@ export function StatsView() {
         </Panel>
       )}
 
-      {pool && (
-        <Panel className="p-5 text-sm">
-          <h2 className="eyebrow">Payout pool</h2>
-          <p className="mt-3 leading-relaxed text-muted-foreground">
-            Pool #{pool.epoch} closes in {clock(secondsLeft(pool.epochEndsAt, now))} with{' '}
-            {pool.pendingCalls} {pool.pendingCalls === 1 ? 'call' : 'calls'} so far. Daily pool:{' '}
-            <strong className="font-mono font-medium text-foreground">
-              {pool.dailyPool} {unit}
-            </strong>
-            . Fees collected: {pool.feesCollected} {unit}.
-          </p>
-          {pool.lastSettlement && (
-            <p className="mt-2 leading-relaxed text-muted-foreground">
-              Last settled pool #{pool.lastSettlement.epoch}: {pool.lastSettlement.rightCalls} right
-              and {pool.lastSettlement.wrongCalls} wrong, +{pool.lastSettlement.profitPerRight} per
-              right call, {pool.lastSettlement.deceptionPaid} paid for deception
-              {pool.lastSettlement.toDailyPool !== undefined &&
-                `, ${pool.lastSettlement.toDailyPool} to the daily pool`}
-              .
+      <div className="grid gap-6 lg:grid-cols-[2fr_3fr] lg:items-start">
+        {pool && (
+          <Panel className="p-5 text-sm">
+            <h2 className="eyebrow">Payout pool</h2>
+            <p className="mt-3 leading-relaxed text-muted-foreground">
+              Pool #{pool.epoch} closes in {clock(secondsLeft(pool.epochEndsAt, now))} with{' '}
+              {pool.pendingCalls} {pool.pendingCalls === 1 ? 'call' : 'calls'} so far. Daily pool:{' '}
+              <strong className="font-mono font-medium text-foreground">
+                {pool.dailyPool} {unit}
+              </strong>
+              . Fees collected: {pool.feesCollected} {unit}.
             </p>
-          )}
-        </Panel>
-      )}
+            {pool.lastSettlement && (
+              <p className="mt-2 leading-relaxed text-muted-foreground">
+                Last settled pool #{pool.lastSettlement.epoch}: {pool.lastSettlement.rightCalls}{' '}
+                right and {pool.lastSettlement.wrongCalls} wrong, +
+                {pool.lastSettlement.profitPerRight} per right call,{' '}
+                {pool.lastSettlement.deceptionPaid} paid for deception
+                {pool.lastSettlement.toDailyPool !== undefined &&
+                  `, ${pool.lastSettlement.toDailyPool} to the daily pool`}
+                .
+              </p>
+            )}
+          </Panel>
+        )}
 
-      {stats && (
-        <Panel className="p-5 text-sm">
-          <h2 className="eyebrow">Bots</h2>
-          {personas.length === 0 ? (
-            <p className="mt-3 text-muted-foreground">No bot rounds yet.</p>
-          ) : (
-            <table className="mt-3 w-full text-left">
-              <thead className="eyebrow">
-                <tr>
-                  <th className="py-1 font-medium">Persona</th>
-                  <th className="py-1 text-right font-medium">Rounds</th>
-                  <th className="py-1 text-right font-medium">Calls</th>
-                  <th className="py-1 text-right font-medium">Fooled</th>
-                </tr>
-              </thead>
-              <tbody>
-                {personas.map((p) => (
-                  <tr key={p.name} className="border-t border-border">
-                    <td className="py-2">
-                      {p.name}
-                      {p.trickster && <Badge className="ml-2">trickster</Badge>}
-                    </td>
-                    <td className="py-2 text-right font-mono tabular-nums">{p.rounds}</td>
-                    <td className="py-2 text-right font-mono tabular-nums">{p.judged}</td>
-                    <td className="py-2 text-right font-mono tabular-nums">
-                      {p.judged ? pct(p.fooled / p.judged) : '–'}
-                    </td>
+        {stats && (
+          <Panel className="p-5 text-sm">
+            <h2 className="eyebrow">Bots</h2>
+            {personas.length === 0 ? (
+              <p className="mt-3 text-muted-foreground">No bot rounds yet.</p>
+            ) : (
+              <table className="mt-3 w-full text-left">
+                <thead className="eyebrow">
+                  <tr>
+                    <th className="py-1 font-medium">Persona</th>
+                    <th className="py-1 text-right font-medium">Rounds</th>
+                    <th className="py-1 text-right font-medium">Calls</th>
+                    <th className="py-1 text-right font-medium">Fooled</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </Panel>
-      )}
+                </thead>
+                <tbody>
+                  {personas.map((p) => (
+                    <tr key={p.name} className="border-t border-border">
+                      <td className="py-2">
+                        {p.name}
+                        {p.trickster && <Badge className="ml-2">trickster</Badge>}
+                      </td>
+                      <td className="py-2 text-right font-mono tabular-nums">{p.rounds}</td>
+                      <td className="py-2 text-right font-mono tabular-nums">{p.judged}</td>
+                      <td className="py-2 text-right font-mono tabular-nums">
+                        {p.judged ? pct(p.fooled / p.judged) : '–'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Panel>
+        )}
+      </div>
     </PageFrame>
   );
 }
