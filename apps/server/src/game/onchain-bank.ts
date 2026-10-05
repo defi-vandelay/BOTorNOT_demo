@@ -8,6 +8,8 @@ const UNIT = 10n ** 18n;
 /** A session must have at least this long left for the server to stake a new round. */
 const SESSION_MARGIN_MS = 5 * 60_000;
 const TICK_MS = 5_000;
+/** How often the pool figures shown on /stats are re-read from the chain. */
+const POOL_READ_MS = 15_000;
 
 /** viem errors carry a one-line summary; the full text is pages long. */
 export function brief(err: unknown): string {
@@ -53,8 +55,19 @@ export class OnchainBank implements Bank {
   private timer?: NodeJS.Timeout;
   private ticking = false;
   private readonly log: (msg: string) => void;
+  /** Staked calls settled so far in the current epoch, as last read from the chain. */
+  private current = { epoch: -1, calls: 0 };
+  private poolReadAt = 0;
   epochEndsAt = 0;
   dailyPool = 0n;
+  fees = 0n;
+  lastSettlement?: {
+    epoch: number;
+    rightCalls: number;
+    wrongCalls: number;
+    profitPerRight: number;
+    deceptionPaid: number;
+  };
 
   constructor(private readonly deps: OnchainBankDeps) {
     this.log = deps.log ?? console.log;
@@ -130,6 +143,7 @@ export class OnchainBank implements Bank {
         for (const c of calls) {
           if (c.staked) this.deps.store.addChainClaim(c.epoch, c.player.toLowerCase());
         }
+        this.poolReadAt = 0;
         this.log(`round ${round.roundId.slice(0, 10)} settled on-chain: ${txHash}`);
         for (const p of players) round.onSettled(p, txHash);
         await this.refreshAndNotify(players);
@@ -148,6 +162,7 @@ export class OnchainBank implements Bank {
     this.ticking = true;
     try {
       this.epochEndsAt = chain.epochEndsAt(chain.epochAt(now));
+      await this.readPool(now);
       const claims = this.deps.store.chainClaims();
       if (!claims.size) return;
       // The contract judges "over" by block time, which can trail this server's clock.
@@ -158,6 +173,7 @@ export class OnchainBank implements Bank {
         this.deps.store.removeChainClaims(epoch);
         this.dailyPool = await chain.dailyPool();
         await this.report(epoch, players, txHash);
+        this.poolReadAt = 0;
         await this.refreshAndNotify(players);
       }
     } catch (err) {
@@ -175,8 +191,10 @@ export class OnchainBank implements Bank {
         `+${tokens(e.profitPerRight)} tBON per right call (${txHash})`,
     );
     const stake = BigInt(STAKE_POINTS) * UNIT;
+    let deception = 0n;
     for (const player of players) {
       const you = await chain.playerEpoch(epoch, player as Address);
+      deception += you.deception;
       const net =
         BigInt(you.right) * (stake + e.profitPerRight) +
         you.deception -
@@ -196,6 +214,34 @@ export class OnchainBank implements Bank {
         txHash,
       });
     }
+    this.lastSettlement = {
+      epoch,
+      rightCalls: e.rightCalls,
+      wrongCalls: e.wrongCalls,
+      profitPerRight: tokens(e.profitPerRight),
+      deceptionPaid: tokens(deception),
+    };
+  }
+
+  /** Re-reads the figures /pool reports, at most every POOL_READ_MS or right after a change. */
+  private async readPool(now: number): Promise<void> {
+    if (now - this.poolReadAt < POOL_READ_MS) return;
+    const chain = this.deps.chain;
+    // Just after a deploy the server's clock can trail the vault's genesis block.
+    const epoch = Math.max(0, chain.epochAt(now));
+    this.poolReadAt = now;
+    try {
+      const [e, dailyPool, fees] = await Promise.all([
+        chain.epoch(epoch),
+        chain.dailyPool(),
+        chain.fees(),
+      ]);
+      this.current = { epoch, calls: e.rightCalls + e.wrongCalls };
+      this.dailyPool = dailyPool;
+      this.fees = fees;
+    } catch (err) {
+      this.log(`could not read the pool from the chain: ${brief(err)}`);
+    }
   }
 
   private async refreshAndNotify(players: string[]): Promise<void> {
@@ -214,14 +260,21 @@ export class OnchainBank implements Bank {
     this.reserved.set(key, Math.max(0, (this.reserved.get(key) ?? 0) + by));
   }
 
+  /** Same fields as the points Ledger's, in whole tBON, plus the vault's details. */
   toJSON() {
+    const chain = this.deps.chain;
+    const epoch = chain.epochLength ? Math.max(0, chain.epochAt(Date.now())) : 0;
     return {
       onchain: true,
-      vault: this.deps.chain.vault,
-      token: this.deps.chain.token,
+      vault: chain.vault,
+      token: chain.token,
+      epoch,
       epochEndsAt: this.epochEndsAt,
-      epochSeconds: this.deps.chain.epochLength,
+      epochSeconds: chain.epochLength,
+      pendingCalls: this.current.epoch === epoch ? this.current.calls : 0,
       dailyPool: tokens(this.dailyPool),
+      feesCollected: tokens(this.fees),
+      lastSettlement: this.lastSettlement,
       pendingEpochs: [...this.deps.store.chainClaims().keys()],
     };
   }

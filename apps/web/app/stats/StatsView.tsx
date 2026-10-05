@@ -29,6 +29,8 @@ interface StatsJson {
 }
 
 interface PoolJson {
+  /** Set when stakes are test tokens in GameVault rather than points. */
+  onchain?: boolean;
   epoch: number;
   epochEndsAt: number;
   pendingCalls: number;
@@ -40,7 +42,8 @@ interface PoolJson {
     wrongCalls: number;
     profitPerRight: number;
     deceptionPaid: number;
-    toDailyPool: number;
+    /** Points only: the vault doesn't keep this per epoch. */
+    toDailyPool?: number;
   };
 }
 
@@ -78,6 +81,7 @@ export function StatsView() {
     };
   }, []);
 
+  const unit = pool?.onchain ? 'tBON' : 'pts';
   const personas = Object.values(stats?.personas ?? {}).sort(
     (a, b) => b.fooled / (b.judged || 1) - a.fooled / (a.judged || 1),
   );
@@ -115,15 +119,19 @@ export function StatsView() {
           <p className="mt-3 leading-relaxed text-muted-foreground">
             Pool #{pool.epoch} closes in {clock(secondsLeft(pool.epochEndsAt, now))} with{' '}
             {pool.pendingCalls} {pool.pendingCalls === 1 ? 'call' : 'calls'} so far. Daily pool:{' '}
-            <strong className="font-mono font-medium text-foreground">{pool.dailyPool} pts</strong>.
-            Fees collected: {pool.feesCollected} pts.
+            <strong className="font-mono font-medium text-foreground">
+              {pool.dailyPool} {unit}
+            </strong>
+            . Fees collected: {pool.feesCollected} {unit}.
           </p>
           {pool.lastSettlement && (
             <p className="mt-2 leading-relaxed text-muted-foreground">
               Last settled pool #{pool.lastSettlement.epoch}: {pool.lastSettlement.rightCalls} right
               and {pool.lastSettlement.wrongCalls} wrong, +{pool.lastSettlement.profitPerRight} per
-              right call, {pool.lastSettlement.deceptionPaid} paid for deception,{' '}
-              {pool.lastSettlement.toDailyPool} to the daily pool.
+              right call, {pool.lastSettlement.deceptionPaid} paid for deception
+              {pool.lastSettlement.toDailyPool !== undefined &&
+                `, ${pool.lastSettlement.toDailyPool} to the daily pool`}
+              .
             </p>
           )}
         </Panel>
