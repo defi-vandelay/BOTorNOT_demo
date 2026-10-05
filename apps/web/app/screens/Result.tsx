@@ -66,42 +66,50 @@ export function Result({
         : 'text-destructive';
 
   return (
-    <section className="flex flex-1 flex-col gap-6">
-      <Panel crosshairs className="px-6 py-8 text-center">
-        <p className="eyebrow">It was</p>
-        <p className="mt-3 font-pixel text-5xl sm:text-6xl">{wasBot ? 'A BOT' : 'A HUMAN'}</p>
-        <p className="mt-5 text-lg">
-          <span className={verdictColor}>{verdict}</span>
-          {result.yourCall && (
-            <span className="text-muted-foreground"> You said {result.yourCall}.</span>
-          )}
-        </p>
-        {stakeNote && <p className="mt-2 text-sm text-muted-foreground">{stakeNote}</p>}
-        {mode === 'tokens' && result.yourCall && (
-          <p className="mt-2 font-mono text-xs text-muted-foreground">
-            {state.settleTx && explorer ? (
-              <a
-                href={`${explorer}/tx/${state.settleTx}`}
-                target="_blank"
-                rel="noreferrer"
-                className="underline underline-offset-4 hover:text-foreground"
-              >
-                Settled on-chain ↗
-              </a>
-            ) : (
-              'Settling on-chain…'
+    // Phones stack reveal, fairness check, button; desktops put the check in a second column.
+    <section className="flex flex-1 flex-col gap-6 lg:grid lg:grid-cols-2 lg:content-center lg:items-start lg:gap-8 lg:pb-8">
+      <div className="contents lg:flex lg:flex-col lg:gap-6">
+        <Panel crosshairs className="order-1 px-6 py-8 text-center lg:py-12">
+          <p className="eyebrow">It was</p>
+          <p className="mt-3 font-pixel text-5xl sm:text-6xl lg:text-7xl">
+            {wasBot ? 'A BOT' : 'A HUMAN'}
+          </p>
+          <p className="mt-5 text-lg">
+            <span className={verdictColor}>{verdict}</span>
+            {result.yourCall && (
+              <span className="text-muted-foreground"> You said {result.yourCall}.</span>
             )}
           </p>
-        )}
-        {result.persona && (
-          <p className="mt-6 rounded-md border border-border bg-surface-raised px-4 py-3 text-sm">
-            You were talking to <strong className="font-medium">{result.persona.name}</strong>:{' '}
-            <span className="text-muted-foreground">{result.persona.blurb}</span>
-          </p>
-        )}
-      </Panel>
+          {stakeNote && <p className="mt-2 text-sm text-muted-foreground">{stakeNote}</p>}
+          {mode === 'tokens' && result.yourCall && (
+            <p className="mt-2 font-mono text-xs text-muted-foreground">
+              {state.settleTx && explorer ? (
+                <a
+                  href={`${explorer}/tx/${state.settleTx}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline underline-offset-4 hover:text-foreground"
+                >
+                  Settled on-chain ↗
+                </a>
+              ) : (
+                'Settling on-chain…'
+              )}
+            </p>
+          )}
+          {result.persona && (
+            <p className="mt-6 rounded-md border border-border bg-surface-raised px-4 py-3 text-sm">
+              You were talking to <strong className="font-medium">{result.persona.name}</strong>:{' '}
+              <span className="text-muted-foreground">{result.persona.blurb}</span>
+            </p>
+          )}
+        </Panel>
+        <Button variant="brand" size="lg" onClick={onAgain} className="order-3">
+          Play again
+        </Button>
+      </div>
 
-      <details className={cn(panelClass, 'p-5 text-sm')} open>
+      <details className={cn(panelClass, 'order-2 p-5 text-sm')} open>
         <summary className="eyebrow cursor-pointer transition-colors hover:text-foreground">
           Fairness check
         </summary>
@@ -130,10 +138,6 @@ export function Result({
           </div>
         </dl>
       </details>
-
-      <Button variant="brand" size="lg" onClick={onAgain}>
-        Play again
-      </Button>
     </section>
   );
 }

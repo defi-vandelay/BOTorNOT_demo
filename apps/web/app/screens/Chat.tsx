@@ -45,7 +45,7 @@ export function Chat({
   };
 
   return (
-    <section className="flex h-[calc(100dvh-8.5rem)] min-h-[420px] flex-col overflow-hidden rounded-md border border-border bg-card">
+    <section className="flex h-[calc(100dvh-8.5rem)] min-h-[420px] w-full flex-col self-center overflow-hidden rounded-md border border-border bg-card lg:h-[calc(100dvh-9.5rem)] lg:max-w-3xl">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <span className="eyebrow">Stranger</span>
         <span className="font-mono text-xs text-muted-foreground tabular-nums">
