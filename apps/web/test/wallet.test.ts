@@ -35,6 +35,20 @@ vi.mock('@coinbase/cdp-core', () => {
   };
 });
 
+// The chain, as the page reads it: the vault's nonce for the player, and its message wording.
+const chain = vi.hoisted(() => ({ nonce: 0n }));
+vi.mock('viem', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('viem')>()),
+  createPublicClient: () => ({
+    readContract: async ({ functionName, args }: { functionName: string; args?: bigint[] }) => {
+      if (functionName === 'nonces') return chain.nonce;
+      if (functionName === 'withdrawAllMessage') return `Withdraw all. Nonce: ${args![0]}`;
+      if (functionName === 'sessionMessage') return `Session ${args![0]} days. Nonce: ${args![1]}`;
+      throw new Error(`unexpected read: ${functionName}`);
+    },
+  }),
+}));
+
 const store = new Map<string, string>();
 vi.stubGlobal('localStorage', {
   getItem: (k: string) => store.get(k) ?? null,
@@ -48,6 +62,7 @@ const embedded = await import('../lib/embedded');
 const wallet = await import('../lib/wallet');
 
 beforeEach(() => {
+  chain.nonce = 0n;
   store.clear();
   cdp.signedIn = false;
   cdp.signOut.mockClear();
@@ -139,5 +154,33 @@ describe('saved sign-ins', () => {
     );
     expect(wallet.savedSignIn()).toBeNull();
     expect(wallet.lastWalletKind()).toBe('embedded');
+  });
+});
+
+describe('signing for the vault', () => {
+  const contracts = { token: account.address, vault: account.address };
+
+  it("signs with the vault's current nonce, not one read before the last top-up", async () => {
+    const flow = await embedded.startEmail('player@example.com');
+    const player = await wallet.signInWithEmbedded(await embedded.finishEmail(flow, '123456'));
+
+    const session = await wallet.signSession(contracts, player, 7);
+    expect(
+      await verifyMessage({
+        address: account.address,
+        message: 'Session 7 days. Nonce: 0',
+        signature: session,
+      }),
+    ).toBe(true);
+
+    chain.nonce = 1n; // the session used nonce 0
+    const withdrawal = await wallet.signWithdrawAll(contracts, player);
+    expect(
+      await verifyMessage({
+        address: account.address,
+        message: 'Withdraw all. Nonce: 1',
+        signature: withdrawal,
+      }),
+    ).toBe(true);
   });
 });

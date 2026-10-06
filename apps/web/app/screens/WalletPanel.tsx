@@ -89,26 +89,45 @@ export function WalletPanel({
   const claimFaucet = faucetReady && inGame < STAKE_POINTS;
   const canTopUp = !!balances && (claimFaucet || !sessionOk);
 
+  /**
+   * Signs and sends; signs once more if the server rejects the signature. The public RPC can lag a
+   * few seconds behind the chain, so straight after a top-up the nonce read here may be the one the
+   * top-up just used.
+   */
+  const signAndSend = async (action: Busy['action'], send: () => Promise<void>) => {
+    try {
+      await send();
+    } catch (err) {
+      if (!/signature isn't valid/i.test(err instanceof Error ? err.message : '')) throw err;
+      setBusy({ action, step: 'wallet' });
+      await new Promise((r) => setTimeout(r, 3000));
+      await send();
+    }
+  };
   const topUp = () =>
-    run(async () => {
-      let session: { days: number; signature: `0x${string}` } | undefined;
-      if (!sessionOk) {
-        setBusy({ action: 'topUp', step: 'wallet' });
-        session = {
-          days: SESSION_DAYS,
-          signature: await signSession(onchain, wallet, SESSION_DAYS, balances!.nonce),
-        };
-      }
-      setBusy({ action: 'topUp', step: 'chain' });
-      await onRequest({ type: 'wallet.topUp', faucet: claimFaucet, session });
-    });
+    run(() =>
+      signAndSend('topUp', async () => {
+        let session: { days: number; signature: `0x${string}` } | undefined;
+        if (!sessionOk) {
+          setBusy({ action: 'topUp', step: 'wallet' });
+          session = {
+            days: SESSION_DAYS,
+            signature: await signSession(onchain, wallet, SESSION_DAYS),
+          };
+        }
+        setBusy({ action: 'topUp', step: 'chain' });
+        await onRequest({ type: 'wallet.topUp', faucet: claimFaucet, session });
+      }),
+    );
   const withdraw = () =>
-    run(async () => {
-      setBusy({ action: 'withdraw', step: 'wallet' });
-      const signature = await signWithdrawAll(onchain, wallet, balances!.nonce);
-      setBusy({ action: 'withdraw', step: 'chain' });
-      await onRequest({ type: 'wallet.withdraw', signature });
-    });
+    run(() =>
+      signAndSend('withdraw', async () => {
+        setBusy({ action: 'withdraw', step: 'wallet' });
+        const signature = await signWithdrawAll(onchain, wallet);
+        setBusy({ action: 'withdraw', step: 'chain' });
+        await onRequest({ type: 'wallet.withdraw', signature });
+      }),
+    );
   const topUpLabel = claimFaucet
     ? sessionOk
       ? 'Get 1,000 free tBON'
@@ -118,7 +137,9 @@ export function WalletPanel({
     busy?.action !== action
       ? idle
       : busy.step === 'wallet'
-        ? 'Sign in your wallet…'
+        ? wallet.kind === 'embedded'
+          ? 'Signing…' // email and social wallets sign on this page, with no popup
+          : 'Sign in your wallet…'
         : 'Sending to the chain…';
 
   return (

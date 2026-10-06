@@ -31,8 +31,6 @@ export interface WalletBalances {
   wallet: bigint;
   /** When the token faucet can be used again (unix ms; 0 = now). */
   faucetReadyAt: number;
-  /** The vault's nonce for the player's next signed message. */
-  nonce: bigint;
 }
 
 type Provider = Parameters<typeof custom>[0];
@@ -132,8 +130,8 @@ export interface Contracts {
 }
 
 export async function readBalances(c: Contracts, player: Address): Promise<WalletBalances> {
-  const { token, vault } = c;
-  const [wallet, lastClaim, cooldown, nonce] = await Promise.all([
+  const { token } = c;
+  const [wallet, lastClaim, cooldown] = await Promise.all([
     publicClient.readContract({
       address: token,
       abi: gameTokenAbi,
@@ -151,24 +149,28 @@ export async function readBalances(c: Contracts, player: Address): Promise<Walle
       abi: gameTokenAbi,
       functionName: 'FAUCET_COOLDOWN',
     }),
-    publicClient.readContract({
-      address: vault,
-      abi: gameVaultAbi,
-      functionName: 'nonces',
-      args: [player],
-    }),
   ]);
   const readyAt = lastClaim === 0n ? 0 : Number(lastClaim + cooldown) * 1000;
-  return { wallet, faucetReadyAt: readyAt, nonce };
+  return { wallet, faucetReadyAt: readyAt };
+}
+
+/**
+ * The vault's nonce for the player's next signed message, read just before signing: each session
+ * or withdrawal uses one up, so a value read earlier (say, before the last top-up) is out of date
+ * and the server would reject the signature.
+ */
+function nextNonce(c: Contracts, player: Address): Promise<bigint> {
+  return publicClient.readContract({
+    address: c.vault,
+    abi: gameVaultAbi,
+    functionName: 'nonces',
+    args: [player],
+  });
 }
 
 /** Signs the vault's own wording for a session of `days` days (GameVault.sessionMessage). */
-export async function signSession(
-  c: Contracts,
-  player: WalletSignIn,
-  days: number,
-  nonce: bigint,
-): Promise<Hex> {
+export async function signSession(c: Contracts, player: WalletSignIn, days: number): Promise<Hex> {
+  const nonce = await nextNonce(c, player.address);
   const message = await publicClient.readContract({
     address: c.vault,
     abi: gameVaultAbi,
@@ -179,11 +181,8 @@ export async function signSession(
 }
 
 /** Signs the vault's wording for withdrawing the whole balance (GameVault.withdrawAllMessage). */
-export async function signWithdrawAll(
-  c: Contracts,
-  player: WalletSignIn,
-  nonce: bigint,
-): Promise<Hex> {
+export async function signWithdrawAll(c: Contracts, player: WalletSignIn): Promise<Hex> {
+  const nonce = await nextNonce(c, player.address);
   const message = await publicClient.readContract({
     address: c.vault,
     abi: gameVaultAbi,
