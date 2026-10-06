@@ -6,7 +6,14 @@ import type { Address } from 'viem';
 import { guestAccount } from './guest';
 import { inviteCode, saveLogin, savedLogin } from './invite';
 import { initialState, reduce } from './game';
-import { savedSignIn, signIn, signOut, type WalletSignIn } from './wallet';
+import { currentWallet, returningFromSocial } from './embedded';
+import {
+  lastWalletKind,
+  savedSignIn,
+  signInWithEmbedded,
+  signOut,
+  type WalletSignIn,
+} from './wallet';
 
 const WS_URL = process.env.NEXT_PUBLIC_SERVER_WS_URL ?? 'ws://localhost:8787/ws';
 const TYPING_THROTTLE_MS = 1_500;
@@ -26,10 +33,23 @@ export function useGame() {
   // A wallet sign-in (on-chain mode) takes over from the per-tab guest key.
   const [guest, setGuest] = useState<ReturnType<typeof guestAccount> | null>(null);
   const [wallet, setWallet] = useState<WalletSignIn | null>(null);
+  // Picking up an email or social sign-in when the page loads (see resumeEmbedded).
+  const [resuming, setResuming] = useState<'working' | { error: string } | null>(null);
   useEffect(() => {
     inviteCode(); // picks up ?invite= from an invite link
     setGuest(guestAccount());
-    setWallet(savedSignIn());
+    const saved = savedSignIn();
+    setWallet(saved);
+    if (!saved && (returningFromSocial() || lastWalletKind() === 'embedded')) {
+      setResuming('working');
+      resumeEmbedded().then(
+        (signIn) => {
+          if (signIn) setWallet(signIn);
+          setResuming(null);
+        },
+        (err: unknown) => setResuming({ error: friendlyError(err) }),
+      );
+    }
   }, []);
   const address: Address | null = wallet?.address ?? guest?.address ?? null;
 
@@ -129,11 +149,13 @@ export function useGame() {
       dismissSettlement() {
         dispatch({ type: 'dismiss-settlement' });
       },
-      async signIn() {
-        setWallet(await signIn());
+      /** Runs one of wallet.ts's sign-ins and switches the game over to that wallet. */
+      async signIn(how: () => Promise<WalletSignIn>) {
+        setResuming(null);
+        setWallet(await how());
       },
       signOut() {
-        signOut();
+        void signOut();
         setWallet(null);
       },
       /** Signs in to a private server with the beta username and password. */
@@ -159,5 +181,23 @@ export function useGame() {
     [send],
   );
 
-  return { state, actions, address };
+  return { state, actions, address, wallet, resuming };
+}
+
+/**
+ * Signs a returning email or social player back in to the game without asking again: back from
+ * Google, Apple or X, or here again after the day-long game sign-in ran out while they're still
+ * signed in with Coinbase. Null if they aren't signed in with Coinbase any more.
+ */
+async function resumeEmbedded(): Promise<WalletSignIn | null> {
+  const social = returningFromSocial(); // read before the SDK tidies the address bar
+  const address = await currentWallet();
+  if (address) return signInWithEmbedded(address);
+  if (social) throw new Error("that sign-in didn't finish, please try again");
+  await signOut(); // signed out with Coinbase too, so stop checking on every visit
+  return null;
+}
+
+function friendlyError(err: unknown): string {
+  return err instanceof Error ? err.message : 'something went wrong, please try again';
 }

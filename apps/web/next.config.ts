@@ -5,7 +5,7 @@ const x402Stub = './lib/x402-stub.ts';
 const config: NextConfig = {
   transpilePackages: ['@botornot/shared'],
   turbopack: {
-    // Optional x402 imports deep inside the Base Account SDK; see lib/x402-stub.ts.
+    // Optional x402 imports deep inside Coinbase's SDKs; see lib/x402-stub.ts.
     resolveAlias: Object.fromEntries(
       [
         '@x402/core/client',
@@ -14,6 +14,7 @@ const config: NextConfig = {
         '@x402/evm/upto/client',
         '@x402/svm/exact/client',
         '@x402/svm/upto/client',
+        'x402-fetch',
       ].map((name) => [name, x402Stub]),
     ),
   },
